@@ -2,6 +2,8 @@
 
 Desktop control software for the uConsole HAM HAT ecosystem, including SA818 radio control and APRS workflows. Compatible with DigiRig hardware.
 
+![HAM HAT Control Center Screenshot](screenshots/Screenshot%202026-03-05%20104010.png)
+
 ## Repository Layout
 
 - `windows-release/ham_hat_control_center_v4` - latest Windows app (`VERSION` = `4.0`)
@@ -86,3 +88,4 @@ If this project helps you, your support is appreciated.
 
 - This repository stores multiple release snapshots; use `windows-release/ham_hat_control_center_v4` for current Windows development/use.
 - Regulatory and band-plan compliance is the operator's responsibility.
+
