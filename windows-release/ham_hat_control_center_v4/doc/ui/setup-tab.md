@@ -1,48 +1,104 @@
-﻿# Setup Tab (`SetupTab`)
+# Setup Tab (`SetupTab`)
 
-## Advanced Radio Controls
+## Advanced Radio (SA818-focused)
+
+### Audio Filters (SA818)
 
 | Element | Type | Connected code | What it actually does | Purpose and how to use |
 |---|---|---|---|---|
-| Disable Pre/De-emphasis | Checkbutton | `_filter_emphasis_var`; `_apply_filters()` | Sets SA818 emphasis filter disable flag when `Apply Filters` is clicked. | Use flat audio response for APRS/data work. |
-| Disable High-pass Filter | Checkbutton | `_filter_highpass_var`; `_apply_filters()` | Sets SA818 high-pass disable flag on apply. | Reduce frequency shaping for modem tones. |
-| Disable Low-pass Filter | Checkbutton | `_filter_lowpass_var`; `_apply_filters()` | Sets SA818 low-pass disable flag on apply. | Preserve full modem tone bandwidth. |
-| Apply Filters | Button | `HamHatApp.apply_filters()` | Applies all three filter flags to connected radio immediately. | Commit filter choices to hardware. |
-| Volume slider (1-8) | Scale | `_volume_var` | Stores desired SA818 volume level. | Choose radio audio volume target. |
-| Set Volume | Button | `HamHatApp.set_volume()` | Applies clamped volume value to connected SA818. | Commit volume change to hardware. |
-| CTCSS TX/RX | Comboboxes | `_ctcss_tx_var`, `_ctcss_rx_var`; saved in profile | Stored into profile and used when radio config is applied (`Apply Radio` or post-connect apply), not applied instantly here. | Configure access tone encode/decode for voice/repeater operation. |
-| DCS TX/RX | Entries | `_dcs_tx_var`, `_dcs_rx_var`; saved in profile | Same behavior as CTCSS: persisted and consumed on next radio apply/connect apply. | Configure digital coded squelch if required. |
-| Open squelch tail | Checkbutton | `_open_tail_var` | Selects desired tail behavior value for apply action. | Choose tail open/closed behavior. |
-| Apply Tail | Button | `HamHatApp.apply_tail()` | Sends SA818 tail command immediately if connected. | Commit squelch-tail setting to hardware. |
+| Disable Pre/De-emphasis | Checkbutton | `_filter_emphasis_var` -> `apply_filters()` | Sets SA818 pre/de-emphasis disable flag. | Keep flatter response for data modes. |
+| Disable High-pass Filter | Checkbutton | `_filter_highpass_var` -> `apply_filters()` | Sets SA818 high-pass disable flag. | Reduce filtering of modem tones. |
+| Disable Low-pass Filter | Checkbutton | `_filter_lowpass_var` -> `apply_filters()` | Sets SA818 low-pass disable flag. | Preserve APRS tone content. |
+| Apply Filters | Button | `_apply_filters()` | Applies all filter flags immediately on connected SA818. | Commit filter settings. |
+
+### Volume
+
+| Element | Type | Connected code | What it actually does | Purpose and how to use |
+|---|---|---|---|---|
+| Volume slider (1-8) | Scale | `_volume_var` | Stores desired SA818 volume level. | Set target hardware volume. |
+| Set Volume | Button | `_set_volume()` | Applies clamped SA818 volume. | Commit volume setting. |
+
+### CTCSS / DCS Tones
+
+| Element | Type | Connected code | What it actually does | Purpose and how to use |
+|---|---|---|---|---|
+| CTCSS TX / RX | Comboboxes | `_ctcss_tx_var`, `_ctcss_rx_var` | Persisted in profile and used on radio apply. | Configure analog access tones. |
+| DCS TX / RX | Entries | `_dcs_tx_var`, `_dcs_rx_var` | Persisted in profile and used on radio apply. | Configure digital coded squelch. |
+
+### Squelch Tail
+
+| Element | Type | Connected code | What it actually does | Purpose and how to use |
+|---|---|---|---|---|
+| Open squelch tail | Checkbutton | `_open_tail_var` | Selects desired tail mode value. | Choose tail behavior before apply. |
+| Apply Tail | Button | `_apply_tail()` -> `apply_tail()` | Sends tail command to SA818 immediately. | Commit tail setting. |
 
 ## Shared Configuration Blocks
 
+These controls are bound to shared app vars and affect runtime behavior across tabs.
+
+### PTT Configuration
+
 | Element | Type | Connected code | What it actually does | Purpose and how to use |
 |---|---|---|---|---|
-| PTT Enabled / Line / Active High / Pre / Post | Shared checkboxes/combobox/spinboxes | Bound to shared app vars used by TX snapshot | These controls change the same PTT state used by Control tab and all TX operations. | Fine-tune keying timing/polarity from Setup view. |
-| APRS TX Advanced (Re-program, Preamble, Repeats, Gain) | Shared controls | Bound to shared APRS TX vars | A second editing surface for APRS TX behavior used by message/position/group/intro sends. | Tune APRS transmit robustness and level. |
-| APRS RX Advanced (Duration, Chunk, Trim, OS level) | Shared controls | Bound to shared APRS RX vars | Same values used by one-shot decode and monitor startup. | Tune RX decode behavior and gain handling. |
+| PTT Enabled | Checkbutton | `ptt_enabled_var` | Global TX PTT enable. | Toggle keying for all TX workflows. |
+| Line | Combobox | `ptt_line_var` | Selects `RTS`/`DTR`. | Match interface wiring. |
+| Active High | Checkbutton | `ptt_active_high_var` | Global PTT polarity. | Correct inverted keying behavior. |
+| Pre-delay / Post-delay | Spinboxes | `ptt_pre_ms_var`, `ptt_post_ms_var` | Global TX keying timing. | Prevent packet clipping. |
+
+### APRS TX Advanced
+
+| Element | Type | Connected code | What it actually does | Purpose and how to use |
+|---|---|---|---|---|
+| Destination | Entry | `aprs_dest_var` | APRS destination field. | Override default `APRS` when needed. |
+| Path | Entry | `aprs_path_var` | APRS path field. | Set digipeater path. |
+| Re-program radio before each TX | Checkbutton | `aprs_reinit_var` | Enables optional SA818 re-init before APRS TX. | Use for unstable radio link behavior. |
+| Preamble flags | Spinbox | `aprs_preamble_var` | Number of opening flags before payload. | Improve receiver sync in weak links. |
+| TX repeats | Spinbox | `aprs_repeats_var` | Number of repeats per send action. | Increase reliability (more airtime). |
+| TX gain | Spinbox | `aprs_tx_gain_var` | AFSK output amplitude scale. | Balance decode reliability vs clipping. |
+| ACK timeout | Spinbox | `aprs_ack_timeout_var` | Reliable-send timeout per attempt. | Tune for link latency/noise. |
+| ACK retries | Spinbox | `aprs_ack_retries_var` | Number of retry attempts. | Tune reliable-message persistence. |
+
+### APRS RX Advanced
+
+| Element | Type | Connected code | What it actually does | Purpose and how to use |
+|---|---|---|---|---|
+| Monitor duration (s) | Spinbox | `aprs_rx_dur_var` | One-shot capture duration. | Control one-shot decode window. |
+| Chunk size (s) | Spinbox | `aprs_rx_chunk_var` | Continuous monitor chunk duration. | Tradeoff latency vs decode robustness. |
+| Trim threshold (dB) | Spinbox | `aprs_rx_trim_var` | RX DSP trim threshold. | Reduce overload before decode. |
+| OS mic level (0-100) | Spinbox | `aprs_rx_os_level_var` | Stored target for host mic level helper. | Set/maintain RX input gain target. |
 
 ## Audio Tools
 
-| Element | Type | Connected code | What it actually does | Purpose and how to use |
-|---|---|---|---|---|
-| Frequency (Hz) | Spinbox | `_tone_freq_var` | Sets generated test tone frequency. | Pick calibration/test frequency. |
-| Duration (s) | Spinbox | `_tone_duration_var` | Sets test tone play length. | Choose test duration. |
-| Play Test Tone | Button | `HamHatApp.play_test_tone()` | Generates WAV and plays it on selected output using current PTT config. | Verify TX audio path/keying. |
-| Stop Audio | Button | `HamHatApp.stop_audio()` | Stops active audio playback in router and updates status. | Abort ongoing test playback. |
-| Packet text | Entry | `_manual_aprs_var` | Text payload for manual APRS packet audio generation. | Set custom APRS packet body for dry run. |
-| Encode & Play (no PTT) | Button | `play_manual_aprs_packet()` | Builds APRS WAV and plays it with PTT forcibly disabled. | Validate modulation/audio path without keying transmitter. |
-| Run TX Channel Sweep | Button | `tx_channel_sweep()` | Runs fixed tone sweep sequence with configured PTT behavior. | Find/verify correct TX channel routing. |
-| Auto-detect RX Level | Button | `auto_detect_rx()` | Captures audio, computes RMS, and suggests OS mic level value. | Fast receive gain calibration helper. |
-
-## Profile, Diagnostics, and Optional TTS
+### Test Tone
 
 | Element | Type | Connected code | What it actually does | Purpose and how to use |
 |---|---|---|---|---|
-| Save Profile... | Button | `_save_profile()` -> `save_profile(path)` | Saves full current app profile to selected JSON path. | Persist current station setup. |
-| Load Profile... | Button | `_load_profile()` -> `load_profile(path)` | Loads selected profile and applies values to all tabs/comms. | Restore a previously saved setup. |
-| Reset Defaults | Button | `_reset_defaults()` -> `reset_defaults()` | Resets to `AppProfile()` defaults after confirmation. | Return app to known baseline. |
-| Install / Update Dependencies | Button | `run_bootstrap()` | Launches `scripts/bootstrap_third_party.py` in separate console. | Install/update required third-party components. |
-| Run Two-Radio Diagnostic | Button | `run_two_radio_diagnostic()` | Launches diagnostic script in separate console. | Run multi-radio troubleshooting flow. |
-| Announce received APRS messages via TTS | Checkbutton | `_tts_enabled_var`; read by `SetupTab.tts_enabled` | If enabled, received APRS messages trigger Windows SpeechSynthesizer announcement. | Audible receive notifications on Windows. |
+| Frequency (Hz) | Spinbox | `_tone_freq_var` | Sets generated tone frequency. | Choose test tone frequency. |
+| Duration (s) | Spinbox | `_tone_duration_var` | Sets playback duration. | Choose test length. |
+| Play Test Tone | Button | `_play_test_tone()` | Plays tone on selected output with current PTT settings. | Validate TX path/keying. |
+| Stop Audio | Button | `_stop_audio()` | Stops active audio playback. | Abort ongoing playback quickly. |
+
+### Manual APRS Packet
+
+| Element | Type | Connected code | What it actually does | Purpose and how to use |
+|---|---|---|---|---|
+| Packet text | Entry | `_manual_aprs_var` | Text used to build manual APRS test packet WAV. | Set custom test payload. |
+| Encode & Play (no PTT) | Button | `_play_manual_aprs()` | Encodes and plays APRS packet with PTT disabled. | Dry-run modem/audio validation. |
+
+### TX/RX Helpers
+
+| Element | Type | Connected code | What it actually does | Purpose and how to use |
+|---|---|---|---|---|
+| Run TX Channel Sweep | Button | `_tx_channel_sweep()` | Runs 1200-2200 Hz sweep for channel/routing checks. | Find correct TX path. |
+| Auto-detect RX Level | Button | `_auto_detect_rx()` | Captures sample audio and suggests RX mic level. | Fast receive gain setup. |
+
+## Profile, Bootstrap, and Optional TTS
+
+| Element | Type | Connected code | What it actually does | Purpose and how to use |
+|---|---|---|---|---|
+| Save Profile... | Button | `_save_profile()` -> `save_profile(path)` | Saves full profile to selected JSON file. | Persist station configuration. |
+| Load Profile... | Button | `_load_profile()` -> `load_profile(path)` | Loads selected profile JSON into app state. | Restore known configuration. |
+| Reset Defaults | Button | `_reset_defaults()` | Resets app profile to defaults after confirmation. | Return to baseline. |
+| Install / Update Dependencies | Button | `_bootstrap()` -> `run_bootstrap()` | Launches bootstrap script in a new console. | Install/update helper dependencies. |
+| Run Two-Radio Diagnostic | Button | `_two_radio_diagnostic()` | Launches diagnostic script in a new console. | Troubleshoot dual-radio setups. |
+| Announce received APRS messages via TTS | Checkbutton | `tts_enabled` property used by app message handler | Enables Windows SpeechSynthesizer announcements for received APRS messages. | Audible message notifications. |

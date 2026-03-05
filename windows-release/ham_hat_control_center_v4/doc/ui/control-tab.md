@@ -1,53 +1,56 @@
-﻿# Control Tab (`MainTab`)
+# Control Tab (`MainTab`)
 
 ## Connection
 
 | Element | Type | Connected code | What it actually does | Purpose and how to use |
 |---|---|---|---|---|
-| Serial Port | Read-only combobox | `port_var` -> `HamHatApp.connect()` | Holds selected COM port name for manual connect. | Pick the COM port for SA818 before pressing `Connect`. |
-| Status text (right side of port row) | Label | `status_var` | Mirrors app status messages (`_set_status`). | Read current operation result/error quickly. |
-| Refresh | Button | `HamHatApp.refresh_ports()` | Scans serial ports and repopulates COM list. | Click when plugging/unplugging USB serial devices. |
-| Auto Identify | Button | `HamHatApp.auto_identify()` -> `auto_identify_and_connect()` | Probes all COM ports in background and connects to first SA818 found. | Use when you do not know the SA818 COM port. |
-| Connect | Button | `HamHatApp.connect()` | Connects to selected COM port, then auto-applies radio profile settings. | Use after selecting a COM port. |
-| Disconnect | Button | `HamHatApp.disconnect()` | Stops APRS RX monitor and disconnects serial radio link. | Use before unplugging or switching radios. |
-| Read Version | Button | `HamHatApp.read_version()` | Queries SA818 firmware version and logs/statuses the response. | Use to confirm the connected module is responding. |
-| Import Profile | Button | `HamHatApp.import_profile()` | Opens file picker and loads profile JSON into all tabs. | Load saved station presets/settings. |
-| Export Profile | Button | `HamHatApp.export_profile()` | Opens file picker and saves current full profile snapshot to JSON. | Backup or share current configuration. |
+| Hardware Mode | Read-only combobox | `hardware_mode_var` | Switches between `SA818` and `DigiRig` workflows and UI visibility. | Select the hardware path before connecting/transmitting. |
+| Status text | Label | `status_var` | Mirrors app status messages. | Quick feedback for connect/TX/RX actions. |
+| SA818 Serial Port | Read-only combobox | `port_var` -> `connect()` | SA818 COM port used in `SA818` mode. Hidden in `DigiRig` mode. | Pick the SA818 port for AT command control. |
+| DigiRig PTT Port | Entry | `digirig_port_var` | Serial port used for DigiRig PTT keying. Hidden in `SA818` mode. | Enter or auto-identify DigiRig serial PTT port. |
+| Refresh | Button | `refresh_ports()` | Re-scans serial ports. | Click after plugging/unplugging USB serial devices. |
+| Auto Identify | Button | `auto_identify()` | `SA818`: probes and connects to first SA818. `DigiRig`: finds non-SA818 serial candidates, prefers CP210x/Silicon Labs, sets DigiRig PTT port. | Fast port discovery for both hardware modes. |
+| Connect | Button | `connect()` | `SA818`: connects and applies radio config. `DigiRig`: informational only (no SA818 connect required). | Start the active hardware workflow. |
+| Disconnect | Button | `disconnect()` | `SA818`: disconnects serial/rx monitor. `DigiRig`: no-op status message. | End SA818 session safely. |
+| Read Version | Button | `read_version()` | Reads SA818 version in `SA818` mode only. | Confirm SA818 module is responding. |
+| Import Profile | Button | `import_profile()` | Loads profile JSON and applies across tabs. | Restore saved station configuration. |
+| Export Profile | Button | `export_profile()` | Saves full profile snapshot to JSON. | Backup/share setup. |
 
-## Radio Parameters
+## Radio Parameters (SA818 only)
 
 | Element | Type | Connected code | What it actually does | Purpose and how to use |
 |---|---|---|---|---|
-| Frequency (MHz) | Entry | `frequency_var` | Parsed by `collect_profile`; applied to SA818 via `apply_radio()` / connect auto-apply. | Enter operating frequency like `145.070`. |
-| Offset (MHz) | Entry | `offset_var` | Parsed into `RadioConfig.offset`; used when applying radio settings. | Enter repeater shift if needed. |
-| Squelch (0-8) | Entry | `squelch_var` | Parsed as int; used in `RadioConfig.squelch`. | Raise to suppress weak noise, lower for sensitivity. |
-| Bandwidth | Read-only combobox | `bandwidth_var` | Mapped to SA818 mode (`Wide`=1, `Narrow`=0). | Choose channel bandwidth for your plan. |
-| Apply Radio | Button | `HamHatApp.apply_radio()` | Sends current frequency/offset/squelch/bandwidth + tones/filters/volume profile to connected SA818. | Press after changing radio-related settings. |
+| Frequency (MHz) | Entry | `frequency_var` | Used in SA818 apply config. | Set operating frequency. |
+| Offset (MHz) | Entry | `offset_var` | Used in SA818 apply config. | Set repeater shift if needed. |
+| Squelch (0-8) | Entry | `squelch_var` | Used in SA818 apply config. | Tune noise gate sensitivity. |
+| Bandwidth | Read-only combobox | `bandwidth_var` | Maps `Wide`/`Narrow` to SA818 config. | Match channel plan. |
+| Apply Radio | Button | `apply_radio()` | Applies frequency/offset/squelch/bandwidth (+tone/filter/volume from profile). Disabled by mode logic in DigiRig. | Commit SA818 radio settings. |
+| DigiRig mode hint | Label | UI-only text block | Replaces radio controls in DigiRig mode. | Reminds user that radio is programmed manually in DigiRig mode. |
 
 ## Audio Routing + Auto Detection
 
 | Element | Type | Connected code | What it actually does | Purpose and how to use |
 |---|---|---|---|---|
-| Audio Output | Read-only combobox | `audio_out_var`, `MainTab._on_out_selected()` -> `HamHatApp.set_output_device()` | Stores output device index/name used for APRS TX/test tones. | Select the playback device feeding SA818 mic input path. |
-| Audio Input | Read-only combobox | `audio_in_var`, `MainTab._on_in_selected()` -> `HamHatApp.set_input_device()` | Stores input device index/name used for APRS RX decode/capture. | Select the recording device fed by SA818 audio out. |
-| Refresh Audio Devices | Button | `HamHatApp.refresh_audio_devices()` | Re-enumerates OS audio devices and repopulates both comboboxes. | Click after audio hardware changes. |
-| Auto Find TX/RX Pair | Button | `HamHatApp.auto_find_audio_pair()` | Runs USB-pair auto-selection in background and updates both devices if found. | Fast way to match SA818 USB audio endpoints. |
-| TX Channel Announce Sweep | Button | `HamHatApp.tx_channel_sweep()` | Plays sequence of tones (1200/1500/1800/2200 Hz), with configured PTT behavior. | Use while tracing correct TX routing/channel. |
-| Auto Detect RX by Voice | Button | `HamHatApp.auto_detect_rx()` | Captures ~3s audio, estimates RMS, and suggests OS mic level (`aprs_rx_os_level_var`). | Use to quickly tune receive gain for decode quality. |
-| Auto-select SA818 audio on connect | Checkbutton | `auto_audio_var` | If enabled, startup/auto-find logic attempts preferred USB audio pair automatically. | Leave enabled for stable single-radio setups. |
+| Audio Output | Read-only combobox | `audio_out_var` -> `set_output_device()` | Sets output device for APRS/test-tone TX playback. | Choose TX audio path. |
+| Audio Input | Read-only combobox | `audio_in_var` -> `set_input_device()` | Sets input device for APRS RX decode/monitoring. | Choose RX audio path. |
+| Refresh Audio Devices | Button | `refresh_audio_devices()` | Re-enumerates OS audio devices. | Use after audio device changes. |
+| Auto Find TX/RX Pair | Button | `auto_find_audio_pair()` | Auto-selects matching USB TX/RX device pair (SA818 USB audio or DigiRig USB PnP). | Quick audio routing setup. |
+| TX Channel Announce Sweep | Button | `tx_channel_sweep()` | Plays tone sequence and keys PTT according to config. | Validate TX route/channel. |
+| Auto Detect RX by Voice | Button | `auto_detect_rx()` | Captures short sample and suggests mic level target. | Fast RX level calibration. |
+| Auto-select USB audio pair on connect | Checkbutton | `auto_audio_var` | Enables automatic USB pair selection at startup/connect flow. | Keep on for stable setups. |
 
 ## PTT
 
 | Element | Type | Connected code | What it actually does | Purpose and how to use |
 |---|---|---|---|---|
-| Key PTT during TX audio | Checkbutton | `ptt_enabled_var` -> `_make_ptt_config()` | Enables/disables serial-line keying during APRS TX/test tones. | Disable only for dry-run audio tests. |
-| PTT Line | Read-only combobox | `ptt_line_var` | Chooses which serial control line is toggled (`RTS` or `DTR`). | Match your interface wiring. |
-| PTT Active High | Checkbutton | `ptt_active_high_var` | Controls PTT polarity when toggling selected line. | Toggle if keying seems inverted. |
-| PTT Pre (ms) | Entry | `ptt_pre_ms_var` | Delay between PTT key and audio playback. | Increase if first symbols are being clipped. |
-| PTT Post (ms) | Entry | `ptt_post_ms_var` | Delay after audio before unkeying PTT. | Increase if tail of packet is clipped. |
+| Key PTT during TX audio | Checkbutton | `ptt_enabled_var` | Enables/disables PTT keying during audio TX. | Disable for dry-run audio tests. |
+| PTT Line | Read-only combobox | `ptt_line_var` | Selects `RTS` or `DTR` control line. | Match hardware wiring. |
+| PTT Active High | Checkbutton | `ptt_active_high_var` | Sets PTT polarity. | Flip if keying polarity is reversed. |
+| PTT Pre (ms) | Entry | `ptt_pre_ms_var` | Delay before TX audio starts. | Avoid clipping first symbols. |
+| PTT Post (ms) | Entry | `ptt_post_ms_var` | Delay before unkey after TX audio. | Avoid clipping TX tail. |
 
 ## Radio Log
 
 | Element | Type | Connected code | What it actually does | Purpose and how to use |
 |---|---|---|---|---|
-| Radio Log panel | `BoundedLog` | `MainTab.append_log()` via app event queue | Displays radio/general/APRS-prefixed operational logs (auto-trimmed to max lines). | Watch for connection, apply, TX/RX workflow messages and warnings. |
+| Radio Log panel | `BoundedLog` | `append_log()` via app event queue | Shows connection/radio/APRS status lines and errors. | Primary low-level operational log on Control tab. |
