@@ -80,7 +80,7 @@ chmod +x run_pi.sh
 ## Support
 
 If this project helps you, your support is appreciated.
-- Patreon: https://patreon.com/VA7AYG?utm_medium=unknown&utm_source=join_link&utm_campaign=creatorshare_creator&utm_content=copyLink
+- Patreon: https://patreon.com/VA7AYG
 
 ## Notes
 
