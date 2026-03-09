@@ -6,8 +6,8 @@ This file is generated. Rebuild with:
 ## Project Snapshot
 
 - Project: `HAM HAT Control Center v4`
-- Python files indexed: `29`
-- Top-level functions: `117`
+- Python files indexed: `28`
+- Top-level functions: `115`
 - Classes: `64`
 - Class methods: `350`
 
@@ -24,7 +24,6 @@ This file is generated. Rebuild with:
 - `app/ui/main_tab.py`
 - `app/ui/comms_tab.py`
 - `app/ui/setup_tab.py`
-- Legacy note: `app/ui/aprs_tab.py` exists, but `HamHatApp._build_ui` mounts `MainTab`, `CommsTab`, and `SetupTab`.
 
 ## Component File Lists
 
@@ -70,7 +69,6 @@ This file is generated. Rebuild with:
 
 ### entry
 
-- `main.py`
 
 ## Class and Function Index
 
@@ -81,7 +79,7 @@ This file is generated. Rebuild with:
 ### app/app.py
 
 - Module: HamHatApp — main application window.
-- Size: `1576 lines`, `64286 bytes`
+- Size: `1576 lines`, `64279 bytes`
 - Constants: `_VERSION_FILE`
 - Classes:
   - `_LogEvt`  [L75]
@@ -691,15 +689,6 @@ This file is generated. Rebuild with:
   - `scrollable_frame(parent)`  [L27]
   - `_build_wf_lut()`  [L92]
 
-### main.py
-
-- Module: HAM HAT Control Center v4 - entry point.
-- Size: `64 lines`, `1803 bytes`
-- Constants: `_HERE`
-- Top-level functions:
-  - `_configure_logging(level)`  [L19]
-  - `main()`  [L30]
-
 ### scripts/bootstrap_third_party.py
 
 - Module: Install core Python requirements and optional third-party SA818 tools.
@@ -727,27 +716,27 @@ This file is generated. Rebuild with:
 ### scripts/generate_agent_onboarding_pack.py
 
 - Module: Generate AI onboarding artifacts for this repository.
-- Size: `343 lines`, `10339 bytes`
-- Constants: `DOC_ROOT, ROOT, ROOT_FILES, SKIP_DIRS, TARGET_DIRS`
+- Size: `334 lines`, `10092 bytes`
+- Constants: `ROOT, ROOT_FILES, SKIP_DIRS, TARGET_DIRS`
 - Classes:
-  - `FuncInfo`  [L35]
-  - `ClassInfo`  [L45]
-  - `ImportInfo`  [L56]
-  - `FileInfo`  [L63]
+  - `FuncInfo`  [L28]
+  - `ClassInfo`  [L38]
+  - `ImportInfo`  [L49]
+  - `FileInfo`  [L56]
 - Top-level functions:
-  - `_safe_read(path)`  [L74]
-  - `_short_doc(node)`  [L78]
-  - `_unparse(node)`  [L84]
-  - `_decorators(node)`  [L93]
-  - `_func_info(node)`  [L102]
-  - `_class_info(node)`  [L122]
-  - `_imports(tree)`  [L138]
-  - `_constants(tree)`  [L160]
-  - `analyze_python_file(path)`  [L174]
-  - `iter_python_files()`  [L201]
-  - `build_index()`  [L217]
-  - `build_markdown(index)`  [L259]
-  - `main()`  [L329]
+  - `_safe_read(path)`  [L67]
+  - `_short_doc(node)`  [L71]
+  - `_unparse(node)`  [L77]
+  - `_decorators(node)`  [L86]
+  - `_func_info(node)`  [L95]
+  - `_class_info(node)`  [L115]
+  - `_imports(tree)`  [L131]
+  - `_constants(tree)`  [L153]
+  - `analyze_python_file(path)`  [L167]
+  - `iter_python_files()`  [L194]
+  - `build_index()`  [L210]
+  - `build_markdown(index)`  [L252]
+  - `main()`  [L321]
 
 ### scripts/play_wav_worker.py
 

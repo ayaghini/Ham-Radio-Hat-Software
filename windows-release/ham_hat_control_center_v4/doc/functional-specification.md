@@ -1,50 +1,51 @@
 ﻿# Functional Specification
 
 Document owner: uConsole HAM HAT project
-Document version: 1.0
-Last updated: 2026-02-25
+Document version: 1.1
+Last updated: 2026-03-09
 
 ## 1. Purpose
 
-Define the required functional behavior of the uConsole HAM HAT Control Center software packages:
-- Windows package: `windows-release/ham_hat_control_center`
+Define required functional behavior for the current HAM HAT software packages:
+- Windows package: `windows-release/ham_hat_control_center_v4`
 - Raspberry Pi package: `pi-release/ham_hat_control_center`
 
-This document reflects implemented behavior as of the date above.
+This document reflects implemented behavior as of 2026-03-09.
 
 ## 2. Scope
 
 In scope:
-- SA818 radio serial control.
-- Local UI workflows for radio configuration.
-- APRS TX/RX workflows (Windows package).
-- APRS comms workflows (Windows package).
-- Local profile persistence.
-- Third-party tool bootstrap workflow.
+- SA818 serial control workflows.
+- DigiRig audio/PTT workflows.
+- Local desktop UI workflows.
+- APRS TX/RX and APRS comms workflows (Windows package).
+- Local profile persistence and import/export.
+- Local diagnostics/bootstrap launchers.
 
 Out of scope:
-- Cloud services and remote control APIs.
-- Automatic regulatory compliance enforcement.
+- Cloud APIs and remote control.
+- Automated regulatory compliance enforcement.
 - Hardware manufacturing process details.
 
 ## 3. System Context
 
 Primary components:
-- SA818 radio module controlled over USB serial.
-- Host computer running Python/Tkinter app (Windows or Raspberry Pi).
-- Audio interface path for APRS AFSK TX/RX (Windows package full support).
+- SA818 radio module (serial AT control path).
+- Optional DigiRig interface (PTT serial + USB audio path).
+- Host computer running Python/Tkinter app.
 
 Primary interfaces:
 - Serial AT command path to SA818.
-- Audio input/output device selection and capture/playback.
+- Serial modem-line path for PTT (`RTS`/`DTR`).
+- Audio input/output selection for APRS AFSK workflows.
 - Local filesystem profile storage (`profiles/last_profile.json`).
 
 ## 4. Platform and Dependency Requirements
 
 Windows package:
-- Python 3.x
-- `pyserial`, `numpy`, `sounddevice`
-- Windows audio stack for APRS audio workflows
+- Python 3.10+
+- `pyserial`, `numpy`, `sounddevice`, `sv-ttk`
+- Optional: `scipy` (decode performance), `pycaw` (Windows OS level helpers)
 
 Raspberry Pi package:
 - Python 3.9+
@@ -53,175 +54,138 @@ Raspberry Pi package:
 
 ## 5. User Roles
 
-- Operator: configures radio and performs normal APRS/comms use.
-- Integrator/tester: validates cable/audio routing, bootstrap, and diagnostics.
+- Operator: performs normal radio/APRS/comms operations.
+- Integrator/tester: validates cabling, PTT timing, audio routing, diagnostics.
 
 ## 6. Functional Requirements
 
 ### FR-01: Application Startup and UI
-- The app shall open a desktop UI with control sections relevant to the package.
-- The app shall auto-load last saved profile if present.
-- The app shall present operation logs for user-visible feedback.
+- The app shall open a desktop UI with three active tabs: `Control`, `APRS Comms`, and `Setup`.
+- The app shall auto-load the last saved profile if present.
+- The app shall show operational logs for user-visible feedback.
 
-### FR-02: Serial Port Discovery and Connection
+### FR-02: Hardware Mode Selection
+- The app shall support `SA818` mode and `DigiRig` mode.
+- In `SA818` mode, serial connect/disconnect/version workflows shall be available.
+- In `DigiRig` mode, SA818 connect/version flows shall be bypassed with clear status text.
+
+### FR-03: Serial Port Discovery and Connection
 - The app shall list available serial ports.
-- The app shall allow manual connect/disconnect.
-- The app shall allow SA818 version read after connection.
-- Windows package shall provide an auto-identify flow that probes ports for SA818.
+- The app shall support manual connect/disconnect in `SA818` mode.
+- The app shall support SA818 version read when connected.
+- The app shall support auto-identify workflow:
+  - `SA818` mode: probe and connect to first SA818 candidate.
+  - `DigiRig` mode: identify likely non-SA818 PTT serial candidate.
 
-Acceptance:
-- Connected state is shown with selected port.
-- Connection/read failures are shown in UI error dialogs and log.
+### FR-04: Radio Parameter Programming (SA818)
+- The app shall support frequency, offset, squelch, bandwidth, CTCSS TX/RX, and DCS TX/RX.
+- The app shall reject invalid tone combinations.
+- The app shall apply valid settings via SA818 AT command path.
 
-### FR-03: Radio Parameter Programming
-- The app shall allow setting:
-  - Frequency (MHz)
-  - Offset (MHz)
-  - Squelch
-  - Bandwidth (Wide/Narrow)
-  - Optional CTCSS TX/RX
-  - Optional DCS TX/RX
-- The app shall reject simultaneous CTCSS and DCS use.
-- The app shall send valid SA818 radio configuration commands.
+### FR-05: Filter, Tail, and Volume Control (SA818)
+- The app shall support filter flag application (pre/de-emphasis, high-pass, low-pass).
+- The app shall support squelch tail mode apply.
+- The app shall support SA818 volume in range 1..8.
 
-Acceptance:
-- Successful apply logs reply from SA818.
-- Invalid tone combinations produce explicit error.
-
-### FR-04: Filter and Volume Control
-- The app shall allow toggling filter flags:
-  - Disable pre/de-emphasis
-  - Disable high-pass
-  - Disable low-pass
-- The app shall allow setting SA818 volume in range 1..8.
-
-Acceptance:
-- Successful apply logs reply from SA818.
-- Invalid value conversions show user error.
-
-### FR-05: Profile Persistence
-- The app shall save current UI settings to JSON profile.
-- The app shall reload profile and restore saved values.
-- Profile location shall be package-local: `profiles/last_profile.json`.
-
-Windows profile shall include APRS/comms/audio/PTT settings.
-Raspberry Pi profile shall include radio/filter/volume settings.
-
-### FR-06: Third-Party Bootstrap
-- The app shall provide a bootstrap action to execute `scripts/bootstrap_third_party.py`.
-- The app shall support offline mode for local snapshot fallback.
-- The app shall stream bootstrap output to app log.
-
-Acceptance:
-- Completion/failure state is visible in log.
+### FR-06: Profile Persistence
+- The app shall save current state to JSON profile.
+- The app shall load profile JSON and restore settings across tabs.
+- The app shall support explicit import/export profile actions.
+- The app shall autosave current profile periodically.
 
 ### FR-07: Audio Playback and PTT Control (Windows)
-- The app shall support TX audio playback on selected output device.
-- The app shall optionally key PTT during playback.
-- PTT options shall include:
-  - Line selection (`RTS` or `DTR`)
-  - Active-high toggle
-  - Pre/post keying delay (ms)
-- The app shall provide test tone playback.
-- The app shall provide APRS test packet audio playback.
+- The app shall support TX audio playback to selected output device.
+- The app shall optionally assert PTT during TX.
+- PTT shall support `RTS`/`DTR`, active-high toggle, and pre/post delays.
+- The app shall provide test tone playback and manual APRS packet playback.
 
 ### FR-08: Audio Device Management (Windows)
-- The app shall list available audio output and input devices.
-- The app shall allow manual selection of TX output and RX input.
-- The app shall provide auto-find TX/RX pair workflow.
-- The app shall provide TX channel announce sweep.
-- The app shall provide RX input auto-detection by voice activity.
+- The app shall list available audio input/output devices.
+- The app shall support manual selection of TX output and RX input.
+- The app shall support automatic USB TX/RX pair selection.
+- The app shall support TX channel sweep and RX auto-detect helper.
 
-### FR-09: APRS Message TX (Windows)
-- The app shall build and transmit APRS message payloads.
-- APRS message text length shall be constrained to APRS wire limits.
-- Source, destination, and path values shall be configurable.
-- TX tuning controls shall include:
-  - TX gain, valid range 0.05..0.40
-  - Preamble flags, valid range 16..400
-  - TX repeats, valid range 1..5
+### FR-09: APRS Direct Message TX (Windows)
+- The app shall build and transmit APRS direct message payloads.
+- APRS source/destination/path shall be configurable.
+- TX tuning controls shall include gain, preamble flags, and repeat count.
 
 ### FR-10: Reliable APRS Direct Messaging (Windows)
-- The app shall support reliable mode for direct APRS messages.
-- Reliable mode shall:
-  - Use message ID (user supplied or generated)
-  - Wait for ACK
-  - Retry until ACK or retry limit reached
-- ACK timeout shall be configurable and > 0.
-- Retry count shall be constrained to 1..10.
+- Reliable mode shall support message IDs, ACK wait, and retry loop.
+- ACK timeout and retry count shall be user-configurable.
+- Reliable mode shall apply to direct messages, not group sends.
 
-### FR-11: APRS Position TX and Map (Windows)
-- The app shall send APRS position payloads from decimal lat/lon.
-- Latitude shall be validated within -90..90.
-- Longitude shall be validated within -180..180.
-- The app shall plot transmitted/received positions on an offline map canvas.
-- The app shall support map clear and open-last-position-in-browser actions.
+### FR-11: APRS Position and Intro TX (Windows)
+- The app shall send APRS position packets from decimal lat/lon.
+- The app shall validate latitude and longitude ranges.
+- The app shall support `@INTRO` discovery packets from current callsign/location/note.
 
-### FR-12: APRS RX Decode (Windows)
-- The app shall provide one-shot RX decode capture for configured duration.
-- The app shall provide continuous monitor mode with configurable chunk duration.
-- The app shall decode AX.25/APRS packets from captured WAV audio.
-- The app shall log decoded packets to APRS monitor.
-- Optional auto-ACK for direct messages shall be supported.
+### FR-12: APRS RX Decode and Monitor (Windows)
+- The app shall support one-shot decode capture.
+- The app shall support continuous monitor mode with configurable chunk duration.
+- The app shall decode APRS/AX.25 packets and log decoded activity.
+- The app shall support optional auto-ACK for direct messages.
 
-### FR-13: Comms Workflows (Windows)
-- The app shall provide contacts management.
-- The app shall track heard stations from RX activity.
-- The app shall provide group definitions with CSV member entry.
-- The app shall maintain thread-based inbox/chat history.
-- The app shall support:
-  - Send to selected contact
-  - Send to selected group
-  - Reply last sender
-- The app shall support intro discovery broadcast (`@INTRO/...`) with location.
+### FR-13: APRS Comms Workflows (Windows)
+- The app shall support contacts management.
+- The app shall support groups with editable member lists.
+- The app shall track heard stations.
+- The app shall maintain thread-based message history with unread indicators.
+- Send actions shall target the currently active thread.
 
-### FR-14: Logging and Error Handling
-- User-facing operations shall log status and failure messages.
-- Recoverable input/configuration failures shall show clear dialog errors.
+### FR-14: Map and Tile Workflows (Windows)
+- The app shall plot decoded APRS station positions on map canvas.
+- The app shall support map clear and open-last-position in browser.
+- The app shall support offline tile download for bounded region/zoom.
+
+### FR-15: Logging and Error Handling
+- User-facing operations shall emit status and log messages.
+- Recoverable input/config failures shall show clear UI errors.
 - Background worker failures shall be surfaced to UI logs/errors.
+
+### FR-16: Optional Windows TTS Announcements
+- The app shall support optional TTS announcements for received APRS messages.
+- TTS shall be disabled by default and user-toggleable in Setup.
 
 ## 7. Data Requirements
 
-Profile storage format:
-- UTF-8 JSON file.
-- Backward-compatible loading using defaults when keys are absent.
+Profile storage:
+- UTF-8 JSON.
+- Backward-compatible loading with defaults for missing keys.
 
 Comms/APRS data:
-- APRS message body limit: 67 characters (wire-level helper limit).
-- Group wire format: `@GRP/GROUP[/part/total]:text` with group token `[A-Z0-9_-]{1,16}`.
+- Direct APRS message body constrained to APRS wire limits.
+- Group wire format: `@GRP/GROUP[/part/total]:text`.
 - Intro wire format: `@INTRO/CALL/LAT/LON:note`.
 
 ## 8. Non-Functional Requirements
 
-- Desktop responsiveness: long-running operations run in background threads.
-- Operational observability: log panel for major actions.
-- Local-only persistence by default (no remote telemetry requirement).
-- Deterministic validation on key numeric fields before TX.
+- UI responsiveness: long operations run in background threads.
+- Main-thread safety: only UI thread may update Tkinter widgets.
+- Operational visibility: status bar + logs for major actions.
+- Local-first operation: no remote telemetry requirement.
 
 ## 9. Constraints and Known Limitations
 
-- Raspberry Pi package does not implement full APRS TX/RX and comms suite present in Windows package.
-- Several advanced audio functions are intentionally Windows-only.
-- Regulatory compliance is operator responsibility.
-- Repo `.gitignore` currently excludes core hardware design directories from git tracking (see architecture source-of-truth note).
+- Raspberry Pi package is behind Windows v4 feature set.
+- Advanced audio helpers are Windows-focused.
+- Regulatory and band-plan compliance remains operator responsibility.
 
 ## 10. Verification Checklist
 
-Minimum acceptance test matrix:
-- Connect/disconnect/version read on SA818.
-- Apply radio/filter/volume success path.
-- Save/load profile and persistence check.
-- Bootstrap success and offline fallback behavior.
-- Windows-only:
-  - APRS message TX and position TX.
-  - Reliable mode ACK success and timeout path.
-  - One-shot RX decode and monitor mode.
-  - Contact/group/comms thread behavior.
-  - Auto audio mapping and manual override.
+Minimum acceptance checks:
+- SA818 connect/disconnect/version read.
+- Radio/filter/tail/volume apply workflows.
+- Profile save/load/import/export and autosave restore.
+- APRS direct message TX and position/intro TX.
+- Reliable mode ACK success and timeout/retry behavior.
+- One-shot and continuous RX monitor decode.
+- Contacts/groups/heard/thread behaviors.
+- Audio mapping, TX sweep, and RX auto-detect helper.
 
 ## 11. Change Control
 
 When behavior changes, update this document with:
 - Date of change.
 - Added/modified FR IDs.
-- Any changed defaults, limits, or platform support boundaries.
+- Any changed defaults, ranges, or platform boundaries.

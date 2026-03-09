@@ -2,7 +2,7 @@
 """HamHatApp — main application window.
 
 Architecture:
-  - One tk.Tk root window with 4 tab pages.
+  - One tk.Tk root window with 3 active tab pages.
   - Engine components run in daemon worker threads; they NEVER touch Tkinter.
   - Worker threads push events into a thread.Queue; the main thread drains
     it every 40 ms via after() and dispatches to tab widgets.

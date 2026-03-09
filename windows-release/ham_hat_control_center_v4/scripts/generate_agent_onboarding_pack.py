@@ -19,8 +19,15 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DOC_ROOT = ROOT / "doc"
 TARGET_DIRS = ["app", "scripts"]
-ROOT_FILES = ["main.py", "requirements.txt", "VERSION", "AGENT_CONTEXT.json", "PROJECT_COMPONENT_MAP.md"]
+ROOT_FILES = [
+    "main.py",
+    "requirements.txt",
+    "VERSION",
+    "doc/AGENT_CONTEXT.json",
+    "doc/PROJECT_COMPONENT_MAP.md",
+]
 SKIP_DIRS = {".venv", "__pycache__", ".git", ".vscode", ".claude"}
 
 
@@ -234,7 +241,7 @@ def build_index() -> dict[str, Any]:
     }
 
     return {
-        "project": "HAM HAT Control Center v2",
+        "project": "HAM HAT Control Center v4",
         "generated_by": "scripts/generate_agent_onboarding_pack.py",
         "root": str(ROOT),
         "summary": {
@@ -276,12 +283,13 @@ def build_markdown(index: dict[str, Any]) -> str:
         "app/engine/aprs_modem.py",
         "app/engine/radio_ctrl.py",
         "app/engine/sa818_client.py",
-        "app/ui/comms_tab.py",
-        "app/ui/aprs_tab.py",
         "app/ui/main_tab.py",
+        "app/ui/comms_tab.py",
+        "app/ui/setup_tab.py",
     ]
     for f in fast:
         lines.append(f"- `{f}`")
+    lines.append("- Legacy note: `app/ui/aprs_tab.py` exists, but `HamHatApp._build_ui` mounts `MainTab`, `CommsTab`, and `SetupTab`.")
     lines.append("")
     lines.append("## Component File Lists")
     lines.append("")
@@ -320,8 +328,9 @@ def build_markdown(index: dict[str, Any]) -> str:
 
 def main() -> int:
     index = build_index()
-    json_path = ROOT / "AGENT_CODE_INDEX.json"
-    md_path = ROOT / "AGENT_ONBOARDING_PACK.md"
+    DOC_ROOT.mkdir(parents=True, exist_ok=True)
+    json_path = DOC_ROOT / "AGENT_CODE_INDEX.json"
+    md_path = DOC_ROOT / "AGENT_ONBOARDING_PACK.md"
     json_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
     md_path.write_text(build_markdown(index), encoding="utf-8")
     print(f"[ok] wrote {json_path.name}")
@@ -331,4 +340,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

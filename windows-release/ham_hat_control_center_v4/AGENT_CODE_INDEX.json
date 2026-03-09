@@ -3,17 +3,15 @@
   "generated_by": "scripts/generate_agent_onboarding_pack.py",
   "root": "C:\\Users\\Yaghi\\OneDrive\\Documents\\Ham-Radio_Hat_software\\Ham-Radio-Hat-Software\\windows-release\\ham_hat_control_center_v4",
   "summary": {
-    "python_files": 29,
-    "top_level_functions": 117,
+    "python_files": 28,
+    "top_level_functions": 115,
     "classes": 64,
     "class_methods": 350
   },
   "root_files_present": [
     "main.py",
     "requirements.txt",
-    "VERSION",
-    "doc/AGENT_CONTEXT.json",
-    "doc/PROJECT_COMPONENT_MAP.md"
+    "VERSION"
   ],
   "component_groups": {
     "app_core": [
@@ -52,9 +50,7 @@
       "scripts/two_radio_diagnostic.py",
       "scripts/tx_wav_worker.py"
     ],
-    "entry": [
-      "main.py"
-    ]
+    "entry": []
   },
   "files": [
     {
@@ -69,7 +65,7 @@
     },
     {
       "path": "app/app.py",
-      "bytes": 64286,
+      "bytes": 64279,
       "lines": 1576,
       "module_doc": "HamHatApp \u2014 main application window.",
       "imports": [
@@ -6830,73 +6826,6 @@
       ]
     },
     {
-      "path": "main.py",
-      "bytes": 1803,
-      "lines": 64,
-      "module_doc": "HAM HAT Control Center v4 - entry point.",
-      "imports": [
-        {
-          "module": "__future__",
-          "names": [
-            "annotations"
-          ],
-          "lineno": 4
-        },
-        {
-          "module": "",
-          "names": [
-            "logging"
-          ],
-          "lineno": 6
-        },
-        {
-          "module": "",
-          "names": [
-            "argparse"
-          ],
-          "lineno": 7
-        },
-        {
-          "module": "",
-          "names": [
-            "sys"
-          ],
-          "lineno": 8
-        },
-        {
-          "module": "pathlib",
-          "names": [
-            "Path"
-          ],
-          "lineno": 9
-        }
-      ],
-      "constants": [
-        "_HERE"
-      ],
-      "functions": [
-        {
-          "name": "_configure_logging",
-          "lineno": 19,
-          "end_lineno": 27,
-          "args": [
-            "level"
-          ],
-          "decorators": [],
-          "doc": ""
-        },
-        {
-          "name": "main",
-          "lineno": 30,
-          "end_lineno": 58,
-          "args": [],
-          "decorators": [],
-          "doc": ""
-        }
-      ],
-      "classes": []
-    },
-    {
       "path": "scripts/bootstrap_third_party.py",
       "bytes": 4247,
       "lines": 132,
@@ -7111,8 +7040,8 @@
     },
     {
       "path": "scripts/generate_agent_onboarding_pack.py",
-      "bytes": 10339,
-      "lines": 343,
+      "bytes": 10092,
+      "lines": 334,
       "module_doc": "Generate AI onboarding artifacts for this repository.",
       "imports": [
         {
@@ -7160,7 +7089,6 @@
         }
       ],
       "constants": [
-        "DOC_ROOT",
         "ROOT",
         "ROOT_FILES",
         "SKIP_DIRS",
@@ -7169,8 +7097,8 @@
       "functions": [
         {
           "name": "_safe_read",
-          "lineno": 74,
-          "end_lineno": 75,
+          "lineno": 67,
+          "end_lineno": 68,
           "args": [
             "path"
           ],
@@ -7179,8 +7107,8 @@
         },
         {
           "name": "_short_doc",
-          "lineno": 78,
-          "end_lineno": 81,
+          "lineno": 71,
+          "end_lineno": 74,
           "args": [
             "node"
           ],
@@ -7189,8 +7117,8 @@
         },
         {
           "name": "_unparse",
-          "lineno": 84,
-          "end_lineno": 90,
+          "lineno": 77,
+          "end_lineno": 83,
           "args": [
             "node"
           ],
@@ -7199,8 +7127,8 @@
         },
         {
           "name": "_decorators",
-          "lineno": 93,
-          "end_lineno": 99,
+          "lineno": 86,
+          "end_lineno": 92,
           "args": [
             "node"
           ],
@@ -7209,8 +7137,8 @@
         },
         {
           "name": "_func_info",
-          "lineno": 102,
-          "end_lineno": 119,
+          "lineno": 95,
+          "end_lineno": 112,
           "args": [
             "node"
           ],
@@ -7219,8 +7147,8 @@
         },
         {
           "name": "_class_info",
-          "lineno": 122,
-          "end_lineno": 135,
+          "lineno": 115,
+          "end_lineno": 128,
           "args": [
             "node"
           ],
@@ -7229,8 +7157,8 @@
         },
         {
           "name": "_imports",
-          "lineno": 138,
-          "end_lineno": 157,
+          "lineno": 131,
+          "end_lineno": 150,
           "args": [
             "tree"
           ],
@@ -7239,8 +7167,8 @@
         },
         {
           "name": "_constants",
-          "lineno": 160,
-          "end_lineno": 171,
+          "lineno": 153,
+          "end_lineno": 164,
           "args": [
             "tree"
           ],
@@ -7249,8 +7177,8 @@
         },
         {
           "name": "analyze_python_file",
-          "lineno": 174,
-          "end_lineno": 198,
+          "lineno": 167,
+          "end_lineno": 191,
           "args": [
             "path"
           ],
@@ -7259,24 +7187,24 @@
         },
         {
           "name": "iter_python_files",
-          "lineno": 201,
-          "end_lineno": 214,
+          "lineno": 194,
+          "end_lineno": 207,
           "args": [],
           "decorators": [],
           "doc": ""
         },
         {
           "name": "build_index",
-          "lineno": 217,
-          "end_lineno": 256,
+          "lineno": 210,
+          "end_lineno": 249,
           "args": [],
           "decorators": [],
           "doc": ""
         },
         {
           "name": "build_markdown",
-          "lineno": 259,
-          "end_lineno": 326,
+          "lineno": 252,
+          "end_lineno": 318,
           "args": [
             "index"
           ],
@@ -7285,8 +7213,8 @@
         },
         {
           "name": "main",
-          "lineno": 329,
-          "end_lineno": 338,
+          "lineno": 321,
+          "end_lineno": 329,
           "args": [],
           "decorators": [],
           "doc": ""
@@ -7295,8 +7223,8 @@
       "classes": [
         {
           "name": "FuncInfo",
-          "lineno": 35,
-          "end_lineno": 41,
+          "lineno": 28,
+          "end_lineno": 34,
           "bases": [],
           "decorators": [
             "dataclass"
@@ -7306,8 +7234,8 @@
         },
         {
           "name": "ClassInfo",
-          "lineno": 45,
-          "end_lineno": 52,
+          "lineno": 38,
+          "end_lineno": 45,
           "bases": [],
           "decorators": [
             "dataclass"
@@ -7317,8 +7245,8 @@
         },
         {
           "name": "ImportInfo",
-          "lineno": 56,
-          "end_lineno": 59,
+          "lineno": 49,
+          "end_lineno": 52,
           "bases": [],
           "decorators": [
             "dataclass"
@@ -7328,8 +7256,8 @@
         },
         {
           "name": "FileInfo",
-          "lineno": 63,
-          "end_lineno": 71,
+          "lineno": 56,
+          "end_lineno": 64,
           "bases": [],
           "decorators": [
             "dataclass"

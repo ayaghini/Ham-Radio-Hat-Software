@@ -1,6 +1,6 @@
 {
   "project": {
-    "name": "HAM HAT Control Center v2",
+    "name": "HAM HAT Control Center v4",
     "type": "Desktop GUI control center",
     "entrypoint": "main.py",
     "primary_platform": "Windows",
@@ -134,23 +134,14 @@
         ]
       },
       {
-        "path": "app/ui/aprs_tab.py",
-        "owns": [
-          "aprs identity",
-          "message tx panel",
-          "position tx panel",
-          "rx monitor controls",
-          "map + aprs monitor"
-        ]
-      },
-      {
         "path": "app/ui/comms_tab.py",
         "owns": [
-          "contacts/groups management",
-          "heard stations",
-          "thread list",
-          "message compose/send",
-          "intro send"
+          "aprs source + rx monitor controls",
+          "contacts/groups/heard station workflows",
+          "threaded message compose/send",
+          "position/intro send controls",
+          "tiled map + offline tile download",
+          "aprs activity log"
         ]
       },
       {
@@ -168,7 +159,7 @@
           "scrollable frame helper",
           "bounded log",
           "waterfall canvas",
-          "offline aprs map canvas"
+          "tiled/offline aprs map canvases"
         ]
       }
     ],
@@ -180,6 +171,13 @@
       "scripts/rx_score_worker.py",
       "scripts/tx_wav_worker.py",
       "scripts/generate_agent_onboarding_pack.py"
+    ],
+    "legacy": [
+      {
+        "path": "app/ui/aprs_tab.py",
+        "status": "legacy (not mounted in notebook)",
+        "note": "Current app wiring in app/app.py creates MainTab, CommsTab, and SetupTab only."
+      }
     ]
   },
   "active_event_contract": {
@@ -272,7 +270,6 @@
     ],
     "ui_behavior_or_controls": [
       "app/ui/main_tab.py",
-      "app/ui/aprs_tab.py",
       "app/ui/comms_tab.py",
       "app/ui/setup_tab.py",
       "app/ui/widgets.py"
@@ -317,7 +314,7 @@
   ],
   "recommended_read_orders": {
     "ultra_fast_5_files": [
-      "AGENT_CONTEXT.json",
+      "doc/AGENT_CONTEXT.json",
       "app/app.py",
       "app/app_state.py",
       "app/engine/models.py",
@@ -333,12 +330,12 @@
       "app/engine/radio_ctrl.py",
       "app/engine/sa818_client.py",
       "app/ui/comms_tab.py",
-      "app/ui/aprs_tab.py"
+      "app/ui/setup_tab.py"
     ],
     "full_index_first": [
-      "AGENT_CODE_INDEX.json",
-      "AGENT_ONBOARDING_PACK.md",
-      "PROJECT_COMPONENT_MAP.md"
+      "doc/AGENT_CODE_INDEX.json",
+      "doc/AGENT_ONBOARDING_PACK.md",
+      "doc/PROJECT_COMPONENT_MAP.md"
     ]
   },
   "commands": {
@@ -359,9 +356,9 @@
     ]
   },
   "onboarding_artifacts": {
-    "primary_map": "PROJECT_COMPONENT_MAP.md",
-    "machine_context": "AGENT_CONTEXT.json",
-    "generated_code_index": "AGENT_CODE_INDEX.json",
-    "generated_human_pack": "AGENT_ONBOARDING_PACK.md"
+    "primary_map": "doc/PROJECT_COMPONENT_MAP.md",
+    "machine_context": "doc/AGENT_CONTEXT.json",
+    "generated_code_index": "doc/AGENT_CODE_INDEX.json",
+    "generated_human_pack": "doc/AGENT_ONBOARDING_PACK.md"
   }
 }

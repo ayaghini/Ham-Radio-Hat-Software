@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HAM HAT Control Center v2 — entry point."""
+"""HAM HAT Control Center v4 - entry point."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def _configure_logging(level: int = logging.WARNING) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="HAM HAT Control Center v2.",
+        description="HAM HAT Control Center v4.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -50,7 +50,7 @@ def main() -> int:
     try:
         from app.app import HamHatApp
     except ImportError as exc:
-        print(f"Import error — is your virtualenv active?\n{exc}", file=sys.stderr)
+        print(f"Import error - is your virtualenv active?\n{exc}", file=sys.stderr)
         return 1
 
     app = HamHatApp(app_dir=_HERE)
@@ -60,3 +60,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
