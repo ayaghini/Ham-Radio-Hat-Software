@@ -1,7 +1,7 @@
 ﻿# APRS Mesh Audit
 
 Date: 2026-03-09
-Scope: Audit of mesh test implementation under `windows-release/ham_hat_control_center_v4`
+Scope: Re-audit after mesh fixes under `windows-release/ham_hat_control_center_v4`
 Audited areas:
 - `app/engine/mesh_mgr.py`
 - `app/ui/mesh_tab.py`
@@ -16,110 +16,96 @@ Commands executed:
 - Result: PASS
 
 2. `python windows-release/ham_hat_control_center_v4/scripts/mesh_sim_tests.py`
-- Result: PASS (38 passed, 0 failed)
+- Result: PASS (`54 passed, 0 failed`)
 
 3. `python windows-release/ham_hat_control_center_v4/main.py --help`
 - Result: PASS
 
-Additional behavioral probes:
+## Fix Verification Summary
 
-1. Endpoint forwarding check (`node_role=ENDPOINT`) on RREQ handling
-- Result: node still forwards (unexpected)
+Previously reported high-severity items were rechecked.
 
-2. Reassembly timeout check via `tick()`
-- Result: stale reassembly entries are not cleared
-
-3. Percent-encoding chunk split probe
-- Result: `%xx` sequence can be split across chunk boundary
-
-## Findings (ordered by severity)
-
-## High
-
-1. **Forwarding role is not enforced; ENDPOINT nodes still relay mesh traffic**
-- Impact: breaks routing model and can increase RF flooding risk.
-- Evidence: forwarding paths in RREQ/RREP/DATA only check `enabled` and rate/ttl, never `node_role`.
-- References:
-  - `app/engine/mesh_mgr.py:313` (`_on_rreq`)
-  - `app/engine/mesh_mgr.py:447` (`_on_data`)
-  - `app/engine/mesh_mgr.py:386`, `:440`, `:509` (forward counters incremented without role gate)
-- Recommendation:
-  - Add `_can_forward()` guard (`self._cfg.node_role == "REPEATER"`) and apply before forwarding in `_on_rreq`, `_on_rrep`, `_on_data`.
-  - Add deterministic test case: ENDPOINT receives forwarded candidate and must drop.
-
-2. **Reassembly timeout logic exists but is never executed in runtime path**
-- Impact: stale partial DATA chunks can accumulate indefinitely (memory growth, stale state).
+1. **Role-based forwarding enforcement**
+- Status: FIXED
 - Evidence:
-  - Cleanup method exists: `app/engine/mesh_mgr.py:617` (`_expire_reassembly`)
-  - `tick()` does not call `_expire_reassembly`: `app/engine/mesh_mgr.py:263`
-- Recommendation:
-  - Call `_expire_reassembly(now)` inside `tick()`.
-  - Add test asserting stale partial chunks are removed by `tick()` after timeout.
+  - `_can_forward()` added: `app/engine/mesh_mgr.py:275`
+  - applied in RREQ/RREP/DATA forward paths
+  - deterministic tests added and passing: `mesh_sim_tests.py` Test 11
 
-3. **Chunking can split percent-encoded triplets, corrupting DATA reassembly/decoding**
-- Impact: message corruption for chunked payloads containing encoded tokens near boundaries.
+2. **Reassembly timeout cleanup execution**
+- Status: FIXED
 - Evidence:
-  - Split logic only avoids boundary directly after `%`, not after `%x`: `app/engine/mesh_mgr.py:680` (`_chunk_body`).
-  - Repro produced chunks like `...%3` and `B...` (invalid split).
-- Recommendation:
-  - Replace boundary logic with safe scanner that never ends inside `%[0-9A-Fa-f]{2}` sequence.
-  - Add deterministic test vector for boundary at `%`, `%x`, and `%xx` positions.
+  - `tick()` now calls `_expire_reassembly(now)`: `app/engine/mesh_mgr.py:286`
+  - deterministic test added and passing: `mesh_sim_tests.py` Test 12
+
+3. **Percent-encoding chunk boundary split risk**
+- Status: FIXED
+- Evidence:
+  - `_chunk_body()` boundary logic updated: `app/engine/mesh_mgr.py:704`
+  - deterministic boundary tests added and passing: `mesh_sim_tests.py` Test 13
+
+4. **MeshTab direct mutation of private route table**
+- Status: FIXED
+- Evidence:
+  - manager API added: `get_route()` / `toggle_pin()` (`mesh_mgr.py:166`, `:170`)
+  - tab now uses manager API: `mesh_tab.py:357`
+
+5. **Unused mesh parser/builder imports in app integration**
+- Status: FIXED (partially)
+- Evidence:
+  - parser/builder imports removed
+  - `MeshManager` import remains unused in `app/app.py:40` (residual low issue below)
+
+## Findings (current, ordered by severity)
 
 ## Medium
 
-4. **UI mutates mesh manager internal private state directly**
-- Impact: bypasses manager invariants and complicates future refactors.
+1. **Operator-facing send log can still be misleading for `mesh_send` no-route case**
+- Impact: ambiguous user feedback.
 - Evidence:
-  - `app/ui/mesh_tab.py:357` (`self._app.mesh._routes.get(dst)`)
+  - `app/app.py:1147` logs: `"DATA to {dst}: not sent (mesh disabled or no route)"`.
+  - Current `send_data()` may still emit packets with `route='*'` when mesh is enabled, so `"no route"` in this message is not a strict condition.
 - Recommendation:
-  - Expose API methods on `MeshManager` for pin/unpin and route lookup.
-  - Keep `_routes` private.
-
-5. **User log messages can report successful send/discovery when nothing was transmitted**
-- Impact: operator confusion during mesh-disabled state or zero-packet generation conditions.
-- Evidence:
-  - `app/app.py:1132` logs `RREQ sent` unconditionally.
-  - `app/app.py:1141` logs `DATA sent ...` unconditionally.
-- Recommendation:
-  - Log explicit outcomes: `sent N packet(s)` and if zero, reason (disabled/no route/no payload).
+  - Change log text to condition-specific messaging based on explicit return reason from `MeshManager`.
+  - Prefer returning `(packets, reason)` from manager methods.
 
 ## Low
 
-6. **Unused imports in app integration path**
-- Impact: code noise and maintenance drift.
+2. **Unused import: `MeshManager` in app module**
+- Impact: minor code hygiene issue.
 - Evidence:
-  - `parse_mesh_payload`, `build_mesh_payload` imported but unused at `app/app.py:40`.
+  - imported at `app/app.py:40`, not otherwise referenced.
 - Recommendation:
-  - Remove unused imports or use intentionally.
+  - remove unused symbol from import list.
 
-7. **Mesh packet intercept returns early before any APRS logging when mesh is disabled**
-- Impact: mesh-prefixed packets are ignored from APRS visibility path while feature is off.
+3. **Mesh packet intercept returns before standard APRS processing when mesh prefix is present**
+- Impact: mesh-prefixed packets are excluded from standard APRS pipeline/logging when mesh handling path is taken.
 - Evidence:
-  - intercept + early return in `app/app.py:1009`.
+  - early-return intercept in `app/app.py:1009-1014`.
 - Recommendation:
-  - Decide policy:
-    - either keep drop behavior and explicitly document,
-    - or log as ignored packet when disabled.
+  - keep as-is if intentional and document it explicitly,
+  - or add an APRS log line noting mesh packet interception.
 
-## Test Coverage Gaps
+## Test Coverage Status
 
-Current `scripts/mesh_sim_tests.py` is strong for baseline flows but misses key regressions:
+`mesh_sim_tests.py` now includes the key regression tests previously missing:
 
-- No ENDPOINT forwarding prohibition test.
-- No tick-driven reassembly expiry test.
-- No chunk-boundary `%xx` integrity test.
-- No UI-contract tests for disabled state behavior and route pin actions.
+- ENDPOINT no-forward enforcement (Test 11)
+- tick-driven reassembly expiry (Test 12)
+- chunk boundary `%XX` integrity (Test 13)
+
+Coverage level is good for deterministic engine behavior.
 
 ## Overall Assessment
 
-- Core structure is solid and test scaffold is useful.
-- Current implementation is **not yet safe to treat as role-correct mesh behavior** due to forwarding-role and chunk/reassembly issues.
-- Recommended status: **Proceed after fixing High findings and adding the missing tests**.
+- Mesh implementation quality improved materially since prior audit.
+- All previously identified High findings are resolved and verified by automated tests.
+- Remaining issues are low-risk/operational clarity items.
 
-## Suggested Fix Order
+Recommended status: **Accept for ongoing test-phase use**, with minor follow-up cleanup.
 
-1. Implement role-based forwarding guard + tests.
-2. Wire reassembly expiry into `tick()` + tests.
-3. Fix chunk boundary algorithm + tests.
-4. Refactor MeshTab pinning to manager API.
-5. Improve operator logging for zero-send outcomes.
+## Suggested Next Cleanup (small PR)
+
+1. Remove unused `MeshManager` import from `app/app.py`.
+2. Improve `mesh_discover` / `mesh_send` user feedback to reason-specific messages.
+3. Document mesh packet intercept behavior in operator docs (`Mesh (Test)` section).
