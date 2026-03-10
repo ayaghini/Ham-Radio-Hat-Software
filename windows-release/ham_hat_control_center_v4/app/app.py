@@ -37,12 +37,14 @@ from .engine.aprs_modem import (
 from .engine.audio_router import AudioRouter
 from .engine.audio_tools import list_input_devices, list_output_devices
 from .engine.comms_mgr import CommsManager
+from .engine.mesh_mgr import MeshManager, MESH_PREFIX
 from .engine.models import (
     AppProfile,
     AprsConfig,
     AudioConfig,
     ChatMessage,
     DecodedPacket,
+    MeshConfig,
     MSG_ID_COUNTER,
     PttConfig,
     RadioConfig,
@@ -53,6 +55,7 @@ from .engine.radio_ctrl import RadioController
 from .engine.sa818_client import SA818Error
 from .ui.comms_tab import CommsTab
 from .ui.main_tab import MainTab
+from .ui.mesh_tab import MeshTab
 from .ui.setup_tab import SetupTab
 
 _log = logging.getLogger(__name__)
@@ -103,6 +106,10 @@ class _ContactsEvt:    pass
 class _StatusEvt:      text: str
 @dataclass
 class _SuggestRxOsLevelEvt: level: int
+@dataclass
+class _MeshLogEvt:          msg: str
+@dataclass
+class _MeshRouteUpdateEvt:  pass
 
 
 class HamHatApp(tk.Tk):
@@ -175,6 +182,17 @@ class HamHatApp(tk.Tk):
         self.hardware_mode_var = self.state.hardware_mode_var
         self.digirig_port_var  = self.state.digirig_port_var
 
+        # --- Mesh ---
+        self.mesh = self.state.mesh
+        self.mesh_enabled_var        = self.state.mesh_enabled_var
+        self.mesh_node_role_var      = self.state.mesh_node_role_var
+        self.mesh_default_ttl_var    = self.state.mesh_default_ttl_var
+        self.mesh_rate_limit_ppm_var = self.state.mesh_rate_limit_ppm_var
+        self.mesh_hello_enabled_var  = self.state.mesh_hello_enabled_var
+        self.mesh_route_expiry_var   = self.state.mesh_route_expiry_var
+        # Wire local_call_provider so mesh manager always sees current callsign
+        self.mesh._local_call = lambda: self.aprs_source_var.get().upper().strip()
+
         # --- Build UI ---
         self._build_ui()
 
@@ -191,6 +209,7 @@ class HamHatApp(tk.Tk):
         self.after(self.POLL_MS, self._drain_queue)
         self.after(self.VIS_MS,  self._vis_tick)
         self.after(self.AUTOSAVE_MS, self._autosave)
+        self.after(5000, self._mesh_tick)
 
         # --- Window close ---
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -216,10 +235,12 @@ class HamHatApp(tk.Tk):
         self._main_tab  = MainTab(self._notebook, self)
         self._comms_tab = CommsTab(self._notebook, self)
         self._setup_tab = SetupTab(self._notebook, self)
+        self._mesh_tab  = MeshTab(self._notebook, self)
 
         self._notebook.add(self._main_tab,  text="  Control  ")
         self._notebook.add(self._comms_tab, text="  APRS Comms  ")
         self._notebook.add(self._setup_tab, text="  Setup  ")
+        self._notebook.add(self._mesh_tab,  text="  Mesh (Test)  ")
 
         # Auto-start RX monitor when APRS Comms tab is selected (if Always-on is enabled)
         self._notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
@@ -348,6 +369,14 @@ class HamHatApp(tk.Tk):
 
         elif isinstance(evt, _SuggestRxOsLevelEvt):
             self.aprs_rx_os_level_var.set(evt.level)
+
+        elif isinstance(evt, _MeshLogEvt):
+            if hasattr(self, "_mesh_tab"):
+                self._mesh_tab.append_log(evt.msg)
+
+        elif isinstance(evt, _MeshRouteUpdateEvt):
+            if hasattr(self, "_mesh_tab"):
+                self._mesh_tab.refresh_routes()
 
     # -----------------------------------------------------------------------
     # Visualiser tick (TX/RX level bars, updated on main thread)
@@ -976,6 +1005,14 @@ class HamHatApp(tk.Tk):
 
     def _handle_packet(self, pkt: "DecodedPacket") -> None:
         """Process a received APRS packet on the main thread."""
+        # --- Mesh intercept (must not crash APRS RX loop) ---
+        if pkt.info.startswith(MESH_PREFIX):
+            try:
+                self._handle_mesh_packet(pkt)
+            except Exception as exc:
+                _log.warning("Mesh packet handler error: %s", exc)
+            return
+
         p = self._get_current_profile()
         local_calls = {p.aprs_source.upper()}
         snap = self._make_tx_snapshot()
@@ -1051,6 +1088,75 @@ class HamHatApp(tk.Tk):
         # TTS announce
         if hasattr(self, "_setup_tab") and self._setup_tab.tts_enabled:
             self._tts_announce(pkt.source, msg_text if msg_fields else pkt.info)
+
+    # -----------------------------------------------------------------------
+    # Mesh actions
+    # -----------------------------------------------------------------------
+
+    def _handle_mesh_packet(self, pkt: "DecodedPacket") -> None:
+        """Process a received mesh packet (called on main thread, errors must not propagate)."""
+        import time as _time
+        now = _time.monotonic()
+        outbound, deliveries = self.mesh.handle_rx(pkt.info, pkt.source, now)
+        # Log deliveries
+        for msg in deliveries:
+            self._evq.put_nowait(_MeshLogEvt(f"[RX] {msg}"))
+        # Dispatch outbound packets via APRS TX
+        for mpkt in outbound:
+            self._mesh_tx(mpkt.raw)
+        # Notify tab of route update
+        if outbound or deliveries:
+            self._evq.put_nowait(_MeshRouteUpdateEvt())
+
+    def _mesh_tx(self, payload: str) -> None:
+        """Send a mesh payload string over the APRS TX path (fire and forget)."""
+        snap = self._make_tx_snapshot()
+        if snap is None:
+            _log.debug("Mesh TX skipped: no TX snapshot available")
+            return
+        import threading as _threading
+        def _worker():
+            try:
+                self.aprs.send_payload(payload, snap)
+            except Exception as exc:
+                _log.warning("Mesh TX error: %s", exc)
+        _threading.Thread(target=_worker, daemon=True).start()
+
+    def mesh_discover(self, target: str) -> None:
+        """Initiate route discovery to target (called from MeshTab)."""
+        import time as _time
+        now = _time.monotonic()
+        pkts = self.mesh.discover_route(target, now)
+        for mpkt in pkts:
+            self._mesh_tx(mpkt.raw)
+        if pkts:
+            self._evq.put_nowait(_MeshLogEvt(f"RREQ sent to {target}"))
+        else:
+            self._evq.put_nowait(_MeshLogEvt(f"Discover {target}: no packet sent (mesh disabled)"))
+
+    def mesh_send(self, dst: str, body: str) -> None:
+        """Send mesh DATA to dst (called from MeshTab)."""
+        import time as _time
+        now = _time.monotonic()
+        pkts = self.mesh.send_data(dst, body, now)
+        for mpkt in pkts:
+            self._mesh_tx(mpkt.raw)
+        if pkts:
+            self._evq.put_nowait(_MeshLogEvt(f"DATA sent to {dst} ({len(pkts)} packet(s))"))
+        else:
+            self._evq.put_nowait(_MeshLogEvt(f"DATA to {dst}: not sent (mesh disabled or no route)"))
+
+    def mesh_apply_config(self) -> None:
+        """Push current mesh Tk vars into MeshManager config."""
+        cfg = MeshConfig(
+            enabled=self.mesh_enabled_var.get(),
+            node_role=self.mesh_node_role_var.get(),
+            default_ttl=self.mesh_default_ttl_var.get(),
+            rate_limit_ppm=self.mesh_rate_limit_ppm_var.get(),
+            hello_enabled=self.mesh_hello_enabled_var.get(),
+            route_expiry_s=self.mesh_route_expiry_var.get(),
+        )
+        self.mesh.set_config(cfg)
 
     # -----------------------------------------------------------------------
     # Comms actions (called by CommsTab)
@@ -1139,6 +1245,8 @@ class HamHatApp(tk.Tk):
         self._main_tab.apply_profile(p)
         self._comms_tab.apply_profile(p)
         self._setup_tab.apply_profile(p)
+        if hasattr(self, "_mesh_tab"):
+            self._mesh_tab.apply_profile(p)
         # Restore comms contacts/groups
         self.comms.from_dict({"contacts": p.chat_contacts, "groups": p.chat_groups})
         self._comms_tab.refresh_contacts()
@@ -1146,6 +1254,15 @@ class HamHatApp(tk.Tk):
         hw = p.hardware_mode if p.hardware_mode in ("SA818", "DigiRig") else "SA818"
         self.hardware_mode_var.set(hw)
         self.digirig_port_var.set(p.digirig_port)
+        # Restore mesh vars and push config into manager
+        self.mesh_enabled_var.set(p.mesh_test_enabled)
+        role = p.mesh_node_role if p.mesh_node_role in ("ENDPOINT", "REPEATER") else "ENDPOINT"
+        self.mesh_node_role_var.set(role)
+        self.mesh_default_ttl_var.set(p.mesh_default_ttl)
+        self.mesh_rate_limit_ppm_var.set(p.mesh_rate_limit_ppm)
+        self.mesh_hello_enabled_var.set(p.mesh_hello_enabled)
+        self.mesh_route_expiry_var.set(p.mesh_route_expiry_s)
+        self.mesh_apply_config()
         # Cache device indices from names (best-effort)
         self._restore_audio_from_profile(p)
 
@@ -1175,6 +1292,13 @@ class HamHatApp(tk.Tk):
         # Hardware mode
         p.hardware_mode = self.hardware_mode_var.get()
         p.digirig_port  = self.digirig_port_var.get().strip()
+        # Mesh
+        p.mesh_test_enabled    = self.mesh_enabled_var.get()
+        p.mesh_node_role       = self.mesh_node_role_var.get()
+        p.mesh_default_ttl     = self.mesh_default_ttl_var.get()
+        p.mesh_rate_limit_ppm  = self.mesh_rate_limit_ppm_var.get()
+        p.mesh_hello_enabled   = self.mesh_hello_enabled_var.get()
+        p.mesh_route_expiry_s  = self.mesh_route_expiry_var.get()
         return p
 
     def _get_current_profile(self) -> AppProfile:
@@ -1190,6 +1314,20 @@ class HamHatApp(tk.Tk):
         except Exception:
             pass
         self.after(self.AUTOSAVE_MS, self._autosave)
+
+    def _mesh_tick(self) -> None:
+        """Periodic mesh housekeeping (HELLO, route expiry)."""
+        try:
+            import time as _time
+            now = _time.monotonic()
+            pkts = self.mesh.tick(now)
+            for mpkt in pkts:
+                self._mesh_tx(mpkt.raw)
+            if pkts:
+                self._evq.put_nowait(_MeshRouteUpdateEvt())
+        except Exception as exc:
+            _log.debug("Mesh tick error: %s", exc)
+        self.after(10_000, self._mesh_tick)  # every 10s
 
     # -----------------------------------------------------------------------
     # TX snapshot builder (captures all values needed by engine threads)

@@ -10,6 +10,7 @@ from pathlib import Path
 from .engine.aprs_engine import AprsEngine
 from .engine.audio_router import AudioRouter
 from .engine.comms_mgr import CommsManager
+from .engine.mesh_mgr import MeshManager
 from .engine.profile import ProfileManager
 from .engine.radio_ctrl import RadioController
 from .engine.tile_provider import TileProvider
@@ -31,6 +32,8 @@ class AppState:
         self.comms = CommsManager()
         self.prof = ProfileManager(self.profile_path)
         self.tiles = TileProvider(app_dir / "tiles")
+        # Mesh manager — local_call_provider wired after AppState is passed to app
+        self.mesh: MeshManager = MeshManager(local_call_provider=lambda: "N0CALL-0")
 
         # --- Thread-safe event queue ---
         self.evq: queue.Queue = queue.Queue()
@@ -80,3 +83,11 @@ class AppState:
         # --- Hardware mode (SA818 HAT or DigiRig) ---
         self.hardware_mode_var = tk.StringVar(value="SA818")
         self.digirig_port_var  = tk.StringVar(value="")
+
+        # --- Mesh (Test) ---
+        self.mesh_enabled_var        = tk.BooleanVar(value=False)
+        self.mesh_node_role_var      = tk.StringVar(value="ENDPOINT")
+        self.mesh_default_ttl_var    = tk.IntVar(value=4)
+        self.mesh_rate_limit_ppm_var = tk.IntVar(value=20)
+        self.mesh_hello_enabled_var  = tk.BooleanVar(value=False)
+        self.mesh_route_expiry_var   = tk.IntVar(value=600)

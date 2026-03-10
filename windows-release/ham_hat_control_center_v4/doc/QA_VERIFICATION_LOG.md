@@ -21,7 +21,7 @@ Goal: compact, AI-friendly troubleshooting ledger.
 | Q03 | Diagnostic script CLI sanity | `python scripts/two_radio_diagnostic.py --help` | PASS | Arg parser and script import path valid. |
 | Q04 | Onboarding generator integrity | `python scripts/generate_agent_onboarding_pack.py` | PASS | Generated artifacts successfully. |
 | Q05 | APRS/Profile smoke (non-GUI) | inline python smoke assertions | PASS | Payload build/parse, chunking, profile coercion pass. |
-| Q06 | JSON artifact validity | `json.load(AGENT_CONTEXT/AGENT_CODE_INDEX)` | PASS | Artifacts parse cleanly. |
+| Q06 | JSON artifact validity | `json.load(agent_bootstap/AGENT_CONTEXT.json, agent_bootstap/AGENT_CODE_INDEX.json)` | PASS | Artifacts parse cleanly. |
 | Q07 | GUI dependency import | `python -c "import sv_ttk"` | FAIL | `ModuleNotFoundError: No module named 'sv_ttk'`. |
 
 ## Findings (ordered by severity)
@@ -81,4 +81,3 @@ Goal: compact, AI-friendly troubleshooting ledger.
 ## Change Log
 
 - 2026-02-27: Initial QA baseline logged.
-

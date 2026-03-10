@@ -102,6 +102,13 @@ def _profile_to_dict(p: AppProfile) -> dict:
         "chat_intro_note": p.chat_intro_note,
         "hardware_mode": p.hardware_mode,
         "digirig_port": p.digirig_port,
+        # Mesh (Test)
+        "mesh_test_enabled": p.mesh_test_enabled,
+        "mesh_node_role": p.mesh_node_role,
+        "mesh_default_ttl": p.mesh_default_ttl,
+        "mesh_rate_limit_ppm": p.mesh_rate_limit_ppm,
+        "mesh_hello_enabled": p.mesh_hello_enabled,
+        "mesh_route_expiry_s": p.mesh_route_expiry_s,
     }
 
 
@@ -194,5 +201,14 @@ def _dict_to_profile(d: dict) -> AppProfile:
     hw = _str("hardware_mode", AppProfile.hardware_mode)
     p.hardware_mode = hw if hw in ("SA818", "DigiRig") else "SA818"
     p.digirig_port = _str("digirig_port", AppProfile.digirig_port)
+
+    # Mesh (Test)
+    p.mesh_test_enabled = _bool("mesh_test_enabled", AppProfile.mesh_test_enabled)
+    role = _str("mesh_node_role", AppProfile.mesh_node_role)
+    p.mesh_node_role = role if role in ("ENDPOINT", "REPEATER") else "ENDPOINT"
+    p.mesh_default_ttl = _int("mesh_default_ttl", AppProfile.mesh_default_ttl, 1, 8)
+    p.mesh_rate_limit_ppm = _int("mesh_rate_limit_ppm", AppProfile.mesh_rate_limit_ppm, 1, 60)
+    p.mesh_hello_enabled = _bool("mesh_hello_enabled", AppProfile.mesh_hello_enabled)
+    p.mesh_route_expiry_s = _int("mesh_route_expiry_s", AppProfile.mesh_route_expiry_s, 60, 3600)
 
     return p

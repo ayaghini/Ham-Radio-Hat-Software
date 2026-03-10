@@ -314,7 +314,7 @@
   ],
   "recommended_read_orders": {
     "ultra_fast_5_files": [
-      "doc/AGENT_CONTEXT.json",
+      "agent_bootstap/AGENT_CONTEXT.json",
       "app/app.py",
       "app/app_state.py",
       "app/engine/models.py",
@@ -333,9 +333,9 @@
       "app/ui/setup_tab.py"
     ],
     "full_index_first": [
-      "doc/AGENT_CODE_INDEX.json",
-      "doc/AGENT_ONBOARDING_PACK.md",
-      "doc/PROJECT_COMPONENT_MAP.md"
+      "agent_bootstap/AGENT_CODE_INDEX.json",
+      "agent_bootstap/AGENT_ONBOARDING_PACK.md",
+      "agent_bootstap/PROJECT_COMPONENT_MAP.md"
     ]
   },
   "commands": {
@@ -356,9 +356,9 @@
     ]
   },
   "onboarding_artifacts": {
-    "primary_map": "doc/PROJECT_COMPONENT_MAP.md",
-    "machine_context": "doc/AGENT_CONTEXT.json",
-    "generated_code_index": "doc/AGENT_CODE_INDEX.json",
-    "generated_human_pack": "doc/AGENT_ONBOARDING_PACK.md"
+    "primary_map": "agent_bootstap/PROJECT_COMPONENT_MAP.md",
+    "machine_context": "agent_bootstap/AGENT_CONTEXT.json",
+    "generated_code_index": "agent_bootstap/AGENT_CODE_INDEX.json",
+    "generated_human_pack": "agent_bootstap/AGENT_ONBOARDING_PACK.md"
   }
 }
