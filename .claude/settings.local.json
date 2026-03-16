@@ -1,7 +1,20 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(python -m compileall -q .)"
-    ]
+  
+  "env": {
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "64000",
+    "ANTHROPIC_BASE_URL": "http://192.168.3.199:1234",
+    "ANTHROPIC_AUTH_TOKEN": "",
+    "ANTHROPIC_DEFAULT_MODEL": "default-model",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "default-model",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "default-model",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "default-model",
+    "ANTHROPIC_SMALL_FAST_MODEL": "default-model",
+    "ANTHROPIC_SMALL_SLOW_MODEL": "default-model",
+    "ANTHROPIC_FAST_MODEL": "default-model",
+    "ANTHROPIC_SLOW_MODEL": "default-model",
+
+    "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "-1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "-1"
   }
 }
+
