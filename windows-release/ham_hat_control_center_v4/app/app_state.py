@@ -11,6 +11,7 @@ from .engine.aprs_engine import AprsEngine
 from .engine.audio_router import AudioRouter
 from .engine.comms_mgr import CommsManager
 from .engine.mesh_mgr import MeshManager
+from .engine.pakt import PaktService
 from .engine.profile import ProfileManager
 from .engine.radio_ctrl import RadioController
 from .engine.tile_provider import TileProvider
@@ -30,6 +31,7 @@ class AppState:
         self.audio = AudioRouter(app_dir)
         self.aprs = AprsEngine(self.radio, self.audio, self.audio_dir)
         self.comms = CommsManager()
+        self.pakt = PaktService()
         self.prof = ProfileManager(self.profile_path)
         self.tiles = TileProvider(app_dir / "tiles")
         # Mesh manager — local_call_provider wired after AppState is passed to app
@@ -82,7 +84,15 @@ class AppState:
 
         # --- Hardware mode (SA818 HAT or DigiRig) ---
         self.hardware_mode_var = tk.StringVar(value="SA818")
-        self.digirig_port_var  = tk.StringVar(value="")
+        self.digirig_port_var = tk.StringVar(value="")
+        self.pakt_device_var = tk.StringVar(value="")
+        self.pakt_address_var = tk.StringVar(value="")
+        self.pakt_callsign_var = tk.StringVar(value="")
+        self.pakt_ssid_var = tk.StringVar(value="0")
+        self.pakt_capabilities_var = tk.StringVar(value="not connected")
+        self.pakt_status_var = tk.StringVar(value="idle")
+        self.pakt_last_config_var = tk.StringVar(value="")
+        self.pakt_last_tx_result_var = tk.StringVar(value="")
 
         # --- Mesh (Test) ---
         self.mesh_enabled_var        = tk.BooleanVar(value=False)

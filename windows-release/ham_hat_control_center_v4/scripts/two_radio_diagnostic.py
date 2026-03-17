@@ -256,7 +256,15 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    return run(_build_parser().parse_args())
+    parser = _build_parser()
+    args = parser.parse_args()
+    if args.extra_record_sec <= 0:
+        parser.error("--extra-record-sec must be positive")
+    if args.serial_loops <= 0:
+        parser.error("--serial-loops must be positive")
+    if args.aprs_loops <= 0:
+        parser.error("--aprs-loops must be positive")
+    return run(args)
 
 
 if __name__ == "__main__":

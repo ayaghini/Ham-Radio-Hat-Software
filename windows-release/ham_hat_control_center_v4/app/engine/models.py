@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -104,7 +105,10 @@ class ChatMessage:
     msg_id: str = ""
     thread_key: str = ""
     group: str = ""
+    backend: str = "APRS"
     delivered: bool = False   # True once an ACK is received for this message
+    failed: bool = False
+    timestamp: float = field(default_factory=time.monotonic)
 
 
 # ---------------------------------------------------------------------------
@@ -255,8 +259,13 @@ class AppProfile:
     chat_intro_note: str = "uConsole HAM HAT online"
 
     # Hardware mode
-    hardware_mode: str = "SA818"  # "SA818" or "DigiRig"
+    hardware_mode: str = "SA818"  # "SA818", "DigiRig", or "PAKT"
     digirig_port: str = ""        # serial port for DigiRig PTT (e.g. "COM5")
+    pakt_device_name: str = ""
+    pakt_device_address: str = ""
+    pakt_callsign: str = ""
+    pakt_ssid: int = 0
+    pakt_capabilities_summary: str = ""
 
     # Mesh (Test) — all disabled by default; must not alter APRS behavior when off
     mesh_test_enabled: bool = False

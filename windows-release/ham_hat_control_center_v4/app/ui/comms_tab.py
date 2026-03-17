@@ -233,6 +233,7 @@ class CommsTab(ttk.Frame):
                                     font=("Consolas", 8), justify="right", spacing1=10)
         self._msg_log.tag_configure("tx_msg",  foreground="#cce8f8", justify="right")
         self._msg_log.tag_configure("tx_ok",   foreground="#5dba6e", justify="right")
+        self._msg_log.tag_configure("tx_fail", foreground="#e07070", justify="right")
         self._msg_log.tag_configure("rx_name", foreground="#b07020",
                                     font=("Consolas", 8), justify="left", spacing1=10)
         self._msg_log.tag_configure("rx_msg",  foreground="#f5a623", justify="left")
@@ -431,7 +432,9 @@ class CommsTab(ttk.Frame):
         self._msg_log.configure(state="normal")
         if msg.direction == "TX":
             self._msg_log.insert("end", f"{msg.src} → {msg.dst}\n", ("tx_name",))
-            if msg.delivered:
+            if msg.failed:
+                self._msg_log.insert("end", msg.text + " !\n", ("tx_fail",))
+            elif msg.delivered:
                 self._msg_log.insert("end", msg.text + " ✓\n", ("tx_ok",))
             else:
                 self._msg_log.insert("end", msg.text + "\n", ("tx_msg",))
@@ -471,7 +474,7 @@ class CommsTab(ttk.Frame):
     def _on_msg_log_resize(self, event: tk.Event) -> None:
         """Keep bubble margins proportional when the message area is resized."""
         margin = max(60, int(event.width * 0.28))
-        for tag in ("tx_name", "tx_msg", "tx_ok"):
+        for tag in ("tx_name", "tx_msg", "tx_ok", "tx_fail"):
             self._msg_log.tag_configure(tag, lmargin1=margin, lmargin2=margin)
         for tag in ("rx_name", "rx_msg"):
             self._msg_log.tag_configure(tag, rmargin=margin)
@@ -487,6 +490,11 @@ class CommsTab(ttk.Frame):
 
     def on_delivered(self, thread_key: str) -> None:
         """Called when a TX message in thread_key receives its ACK."""
+        if thread_key == self._app.comms.active_thread:
+            self._load_thread(thread_key)
+
+    def on_message_updated(self, thread_key: str) -> None:
+        """Reload the active thread after a delivery-state change."""
         if thread_key == self._app.comms.active_thread:
             self._load_thread(thread_key)
 

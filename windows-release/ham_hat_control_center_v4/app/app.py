@@ -12,9 +12,11 @@ Architecture:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -24,7 +26,10 @@ from typing import Optional
 
 import tkinter as tk
 from tkinter import messagebox, ttk
-import sv_ttk
+try:
+    import sv_ttk as _sv_ttk
+except ImportError:
+    _sv_ttk = None  # type: ignore[assignment]
 
 from .app_state import AppState
 from .engine.aprs_engine import AprsEngine, _TxSnapshot
@@ -49,6 +54,16 @@ from .engine.models import (
     PttConfig,
     RadioConfig,
     ReliableConfig,
+)
+from .engine.pakt import (
+    PaktCapabilities,
+    PaktConfigEvent,
+    PaktConnectionEvent,
+    PaktDeviceInfoEvent,
+    PaktScanResult,
+    PaktTelemetryEvent,
+    PaktTxQueuedEvent,
+    PaktTxResultEvent,
 )
 from .engine.profile import ProfileManager
 from .engine.radio_ctrl import RadioController
@@ -105,6 +120,24 @@ class _ContactsEvt:    pass
 @dataclass
 class _StatusEvt:      text: str
 @dataclass
+class _PaktScanEvt:       devices: list[PaktScanResult]
+@dataclass
+class _PaktConnEvt:       event: PaktConnectionEvent
+@dataclass
+class _PaktCapsEvt:       caps: PaktCapabilities
+@dataclass
+class _PaktInfoEvt:       info: PaktDeviceInfoEvent
+@dataclass
+class _PaktConfigEvt:     event: PaktConfigEvent
+@dataclass
+class _PaktTelemEvt:      event: PaktTelemetryEvent
+@dataclass
+class _PaktTxQueuedEvt:   event: PaktTxQueuedEvent
+@dataclass
+class _PaktTxEvt:         event: PaktTxResultEvent
+@dataclass
+class _PaktSysStatusEvt:  text: str  # backend status → both global bar and PAKT panel
+@dataclass
 class _SuggestRxOsLevelEvt: level: int
 @dataclass
 class _MeshLogEvt:          msg: str
@@ -128,14 +161,16 @@ class HamHatApp(tk.Tk):
         self.title(f"HAM HAT Control Center  ({self._version})")
         self.minsize(860, 600)
 
-        # Set the theme
-        sv_ttk.set_theme("dark")
+        # Set the theme (sv_ttk is optional; falls back to default ttk theme)
+        if _sv_ttk is not None:
+            _sv_ttk.set_theme("dark")
 
         # Pass references from state to self for convenience
         self.radio = self.state.radio
         self.audio = self.state.audio
         self.aprs = self.state.aprs
         self.comms = self.state.comms
+        self.pakt = self.state.pakt
         self.tiles = self.state.tiles
         self._prof = self.state.prof
         self._evq = self.state.evq
@@ -181,6 +216,14 @@ class HamHatApp(tk.Tk):
         self.aprs_rx_auto_var = self.state.aprs_rx_auto_var
         self.hardware_mode_var = self.state.hardware_mode_var
         self.digirig_port_var  = self.state.digirig_port_var
+        self.pakt_device_var = self.state.pakt_device_var
+        self.pakt_address_var = self.state.pakt_address_var
+        self.pakt_callsign_var = self.state.pakt_callsign_var
+        self.pakt_ssid_var = self.state.pakt_ssid_var
+        self.pakt_capabilities_var = self.state.pakt_capabilities_var
+        self.pakt_status_var = self.state.pakt_status_var
+        self.pakt_last_config_var = self.state.pakt_last_config_var
+        self.pakt_last_tx_result_var = self.state.pakt_last_tx_result_var
 
         # --- Mesh ---
         self.mesh = self.state.mesh
@@ -210,6 +253,7 @@ class HamHatApp(tk.Tk):
         self.after(self.VIS_MS,  self._vis_tick)
         self.after(self.AUTOSAVE_MS, self._autosave)
         self.after(5000, self._mesh_tick)
+        self.after(30_000, self._pakt_tx_timeout_tick)
 
         # --- Window close ---
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -285,6 +329,17 @@ class HamHatApp(tk.Tk):
         self.aprs.on_output_level(lambda lv: _post(_OutputLevelEvt(lv)))
         self.aprs.on_waterfall(lambda mono, rate: _post(_WaterfallEvt(mono, rate)))
         self.aprs.on_rx_clip(lambda pct: _post(_RxClipEvt(pct)))
+
+        self.pakt.set_config_cache_path(self._app_dir / "profiles" / "pakt_config_cache.json")
+        self.pakt._on_scan_results = lambda items: _post(_PaktScanEvt(items))
+        self.pakt._on_connection = lambda event: _post(_PaktConnEvt(event))
+        self.pakt._on_status = lambda event: _post(_PaktSysStatusEvt(event.text))
+        self.pakt._on_capabilities = lambda caps: _post(_PaktCapsEvt(caps))
+        self.pakt._on_device_info = lambda info: _post(_PaktInfoEvt(info))
+        self.pakt._on_config = lambda event: _post(_PaktConfigEvt(event))
+        self.pakt._on_telemetry = lambda event: _post(_PaktTelemEvt(event))
+        self.pakt._on_tx_queued = lambda event: _post(_PaktTxQueuedEvt(event))
+        self.pakt._on_tx_result = lambda event: _post(_PaktTxEvt(event))
 
     def _wire_comms(self) -> None:
         def _post(evt): self._evq.put_nowait(evt)
@@ -367,6 +422,80 @@ class HamHatApp(tk.Tk):
         elif isinstance(evt, _StatusEvt):
             self._set_status(evt.text)
 
+        elif isinstance(evt, _PaktScanEvt):
+            pairs = [(item.name, item.address) for item in evt.devices]
+            self._main_tab.set_pakt_scan_results(pairs)
+            # set_pakt_scan_results handles device_var and address_var selection.
+
+        elif isinstance(evt, _PaktConnEvt):
+            self._main_tab.set_pakt_status(evt.event.message)
+            self._main_tab.set_pakt_ble_state(evt.event.state)
+            self.pakt_status_var.set(evt.event.message)
+            if evt.event.address:
+                self.pakt_address_var.set(evt.event.address)
+            if evt.event.state == "CONNECTED":
+                addr = evt.event.address or self.pakt_address_var.get().strip()
+                self._conn_lbl.configure(text=f"🟢 PAKT {addr}", foreground="#70c070")
+            elif evt.event.state in {"CONNECTING", "RECONNECTING"}:
+                addr = evt.event.address or self.pakt_address_var.get().strip()
+                suffix = f" {addr}" if addr else ""
+                self._conn_lbl.configure(text=f"🟡 PAKT{suffix}", foreground="#d6b34c")
+            elif evt.event.state == "SCANNING":
+                self._conn_lbl.configure(text="🔵 PAKT Scanning…", foreground="#6ab0e0")
+            elif evt.event.state in {"IDLE", "ERROR"}:
+                self._conn_lbl.configure(text="⚫ Disconnected", foreground="#e07070")
+
+        elif isinstance(evt, _PaktCapsEvt):
+            summary = evt.caps.summary()
+            self._main_tab.set_pakt_capabilities(summary)
+            self.pakt_capabilities_var.set(summary)
+
+        elif isinstance(evt, _PaktInfoEvt):
+            if evt.info.model:
+                self._main_tab.append_log(
+                    f"[PAKT] {evt.info.manufacturer} {evt.info.model} fw={evt.info.firmware_rev}"
+                )
+
+        elif isinstance(evt, _PaktConfigEvt):
+            self.pakt_last_config_var.set(evt.event.text)
+            self._main_tab.set_pakt_config_text(evt.event.text)
+            if evt.event.source == "read":
+                self._apply_pakt_config_to_vars(evt.event.text)
+
+        elif isinstance(evt, _PaktTelemEvt):
+            # Only push high-signal events to the status panel to avoid thrashing.
+            # All telemetry is written to the log with a structured format.
+            if evt.event.name in {"device_status", "tx_result"}:
+                self._main_tab.set_pakt_status(f"{evt.event.name}: {evt.event.text}")
+            self._main_tab.append_log(f"[PAKT telem/{evt.event.name}] {evt.event.text}")
+
+        elif isinstance(evt, _PaktTxQueuedEvt):
+            self.comms.add_message(
+                ChatMessage(
+                    direction="TX",
+                    src=self.pakt_callsign_var.get().strip().upper() or self.aprs_source_var.get().strip().upper(),
+                    dst=evt.event.dest,
+                    text=evt.event.text,
+                    msg_id=evt.event.local_id,
+                    thread_key=evt.event.dest,
+                    backend="PAKT",
+                )
+            )
+
+        elif isinstance(evt, _PaktTxEvt):
+            self.pakt_last_tx_result_var.set(evt.event.raw_json)
+            self._main_tab.set_pakt_status(f"TX {evt.event.msg_id}: {evt.event.status}")
+            self._main_tab.append_log(
+                f"[PAKT tx/{evt.event.msg_id}] status={evt.event.status}"
+            )
+            thread_key = self.comms.mark_pakt_tx_result(evt.event.msg_id, evt.event.status)
+            if thread_key:
+                self._comms_tab.on_message_updated(thread_key)
+
+        elif isinstance(evt, _PaktSysStatusEvt):
+            self._set_status(evt.text)
+            self._main_tab.set_pakt_status(evt.text)
+
         elif isinstance(evt, _SuggestRxOsLevelEvt):
             self.aprs_rx_os_level_var.set(evt.level)
 
@@ -412,8 +541,11 @@ class HamHatApp(tk.Tk):
     def _startup_auto_tasks(self) -> None:
         # Populate serial port list (FR-02: app shall list available serial ports)
         self.refresh_ports()
-        # Refresh audio device lists in main tab
+        # Refresh audio device lists for all modes so comboboxes are populated
         self._main_tab.refresh_audio_devices()
+        if self._hw_mode() == "PAKT":
+            self.pakt_scan()
+            return
         # Try auto-select USB audio
         self._auto_find_audio_background()
 
@@ -444,8 +576,12 @@ class HamHatApp(tk.Tk):
     # -----------------------------------------------------------------------
 
     def _hw_mode(self) -> str:
-        """Return current hardware mode: 'SA818' or 'DigiRig'."""
+        """Return current hardware mode."""
         return self.hardware_mode_var.get()
+
+    def on_hw_mode_changed(self) -> None:
+        """Reset the footer connection indicator when the hardware mode selector changes."""
+        self._conn_lbl.configure(text="⚫ Disconnected", foreground="#e07070")
 
     # -----------------------------------------------------------------------
     # Connection actions
@@ -453,6 +589,9 @@ class HamHatApp(tk.Tk):
 
     def connect(self, port: str = "") -> None:
         """Connect to SA818 on given port (called from main thread)."""
+        if self._hw_mode() == "PAKT":
+            self.pakt_connect_selected()
+            return
         if self._hw_mode() == "DigiRig":
             self._set_status("DigiRig mode: no SA818 connection needed. Set PTT port and select audio device.")
             return
@@ -479,6 +618,9 @@ class HamHatApp(tk.Tk):
         self._apply_radio_config(p)
 
     def disconnect(self) -> None:
+        if self._hw_mode() == "PAKT":
+            self.pakt_disconnect()
+            return
         if self._hw_mode() == "DigiRig":
             self._set_status("DigiRig mode: nothing to disconnect.")
             return
@@ -502,6 +644,9 @@ class HamHatApp(tk.Tk):
 
     def auto_identify_and_connect(self) -> None:
         """Probe COM ports. SA818 mode: connect to first SA818. DigiRig mode: find non-SA818 port."""
+        if self._hw_mode() == "PAKT":
+            self.pakt_scan()
+            return
         if self._hw_mode() == "DigiRig":
             def digirig_worker():
                 """
@@ -590,6 +735,9 @@ class HamHatApp(tk.Tk):
 
     def apply_radio(self) -> None:
         """Read radio params from main tab and apply to SA818."""
+        if self._hw_mode() == "PAKT":
+            self._set_status("Radio control not available in PAKT mode.")
+            return
         if self._hw_mode() == "DigiRig":
             self._set_status("Radio control not available in DigiRig mode — program radio manually.")
             return
@@ -630,6 +778,8 @@ class HamHatApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def apply_filters(self, emphasis: bool, highpass: bool, lowpass: bool) -> None:
+        if self._hw_mode() == "PAKT":
+            self._set_status("Filter control not available in PAKT mode."); return
         if self._hw_mode() == "DigiRig":
             self._set_status("Filter control not available in DigiRig mode."); return
         if not self.radio.connected:
@@ -645,6 +795,8 @@ class HamHatApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def set_volume(self, level: int) -> None:
+        if self._hw_mode() == "PAKT":
+            self._set_status("Volume control not available in PAKT mode."); return
         if self._hw_mode() == "DigiRig":
             self._set_status("Volume control not available in DigiRig mode."); return
         if not self.radio.connected:
@@ -660,6 +812,8 @@ class HamHatApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def apply_tail(self, open_tail: bool) -> None:
+        if self._hw_mode() == "PAKT":
+            self._set_status("Squelch tail not available in PAKT mode."); return
         if self._hw_mode() == "DigiRig":
             self._set_status("Squelch tail not available in DigiRig mode."); return
         if not self.radio.connected:
@@ -720,6 +874,10 @@ class HamHatApp(tk.Tk):
         self._send_aprs_message_impl(to, text, reliable)
 
     def _send_aprs_message_impl(self, to: str, text: str, reliable: bool) -> None:
+        if self._hw_mode() == "PAKT":
+            self.pakt_send_tx_request(dest=to, text=text)
+            return
+
         snap = self._make_tx_snapshot()
         if snap is None:
             self._set_status("Cannot TX: check connection / audio device")
@@ -787,6 +945,9 @@ class HamHatApp(tk.Tk):
         self._evq.put_nowait(_AprsLogEvt(msg))
 
     def send_group_message(self, group: str, text: str) -> None:
+        if self._hw_mode() == "PAKT":
+            self._set_status("Group TX is not implemented for PAKT in this pass")
+            return
         snap = self._make_tx_snapshot()
         if snap is None:
             self._set_status("Cannot TX: check connection / audio device")
@@ -808,6 +969,9 @@ class HamHatApp(tk.Tk):
             self.comms.add_message(msg)
 
     def send_position(self, lat: float, lon: float, comment: str) -> None:
+        if self._hw_mode() == "PAKT":
+            self._set_status("Position TX is not implemented for PAKT in this pass")
+            return
         snap = self._make_tx_snapshot()
         if snap is None:
             self._set_status("Cannot TX: check connection / audio device")
@@ -823,6 +987,9 @@ class HamHatApp(tk.Tk):
         self._set_status(f"Position TX: {lat:.4f}, {lon:.4f}")
 
     def send_intro(self, note: str) -> None:
+        if self._hw_mode() == "PAKT":
+            self._set_status("Intro TX is not implemented for PAKT in this pass")
+            return
         snap = self._make_tx_snapshot()
         if snap is None:
             self._set_status("Cannot TX: check connection / audio device")
@@ -839,6 +1006,9 @@ class HamHatApp(tk.Tk):
 
     def start_rx_monitor(self) -> None:
         hw = self._hw_mode()
+        if hw == "PAKT":
+            self._set_status("PAKT uses BLE notifications instead of the audio RX monitor")
+            return
         if hw != "DigiRig" and not self.radio.connected:
             self._set_status("Not connected"); return
         p = self._get_current_profile()
@@ -867,6 +1037,8 @@ class HamHatApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def one_shot_rx(self) -> None:
+        if self._hw_mode() == "PAKT":
+            self._set_status("One-shot audio RX is not available in PAKT mode"); return
         if self._hw_mode() != "DigiRig" and not self.radio.connected:
             self._set_status("Not connected"); return
         p = self._get_current_profile()
@@ -878,6 +1050,9 @@ class HamHatApp(tk.Tk):
     # -----------------------------------------------------------------------
 
     def play_test_tone(self, freq: float = 1200.0, duration: float = 2.0) -> None:
+        if self._hw_mode() == "PAKT":
+            self._set_status("Test tone is not applicable in PAKT mode")
+            return
         out_dev = getattr(self, "_output_dev_idx", None) or 0
         ptt = self._make_ptt_config()
         dr_port = self.digirig_port_var.get().strip() if self._hw_mode() == "DigiRig" else ""
@@ -885,6 +1060,9 @@ class HamHatApp(tk.Tk):
         self._set_status(f"Test tone: {freq:.0f} Hz  {duration:.1f}s")
 
     def play_manual_aprs_packet(self, text: str) -> None:
+        if self._hw_mode() == "PAKT":
+            self._set_status("Manual APRS audio generation is not applicable in PAKT mode")
+            return
         snap = self._make_tx_snapshot()
         if snap is None:
             self._set_status("Cannot TX: check audio device")
@@ -1251,9 +1429,14 @@ class HamHatApp(tk.Tk):
         self.comms.from_dict({"contacts": p.chat_contacts, "groups": p.chat_groups})
         self._comms_tab.refresh_contacts()
         # Restore hardware mode vars
-        hw = p.hardware_mode if p.hardware_mode in ("SA818", "DigiRig") else "SA818"
+        hw = p.hardware_mode if p.hardware_mode in ("SA818", "DigiRig", "PAKT") else "SA818"
         self.hardware_mode_var.set(hw)
         self.digirig_port_var.set(p.digirig_port)
+        self.pakt_device_var.set(p.pakt_device_name)
+        self.pakt_address_var.set(p.pakt_device_address)
+        self.pakt_callsign_var.set(p.pakt_callsign)
+        self.pakt_ssid_var.set(str(p.pakt_ssid))
+        self.pakt_capabilities_var.set(p.pakt_capabilities_summary or "not connected")
         # Restore mesh vars and push config into manager
         self.mesh_enabled_var.set(p.mesh_test_enabled)
         role = p.mesh_node_role if p.mesh_node_role in ("ENDPOINT", "REPEATER") else "ENDPOINT"
@@ -1292,6 +1475,14 @@ class HamHatApp(tk.Tk):
         # Hardware mode
         p.hardware_mode = self.hardware_mode_var.get()
         p.digirig_port  = self.digirig_port_var.get().strip()
+        p.pakt_device_name = self.pakt_device_var.get().strip()
+        p.pakt_device_address = self.pakt_address_var.get().strip()
+        p.pakt_callsign = self.pakt_callsign_var.get().strip().upper()
+        try:
+            p.pakt_ssid = int(self.pakt_ssid_var.get())
+        except ValueError:
+            pass
+        p.pakt_capabilities_summary = self.pakt_capabilities_var.get().strip()
         # Mesh
         p.mesh_test_enabled    = self.mesh_enabled_var.get()
         p.mesh_node_role       = self.mesh_node_role_var.get()
@@ -1314,6 +1505,17 @@ class HamHatApp(tk.Tk):
         except Exception:
             pass
         self.after(self.AUTOSAVE_MS, self._autosave)
+
+    def _pakt_tx_timeout_tick(self) -> None:
+        """Expire PAKT outbound messages that never received a tx_result."""
+        try:
+            expired_keys = self.comms.expire_stale_pakt_tx(max_age_s=120.0)
+            for thread_key in expired_keys:
+                _log.debug("PAKT TX expired (no tx_result) for thread %s", thread_key)
+                self._comms_tab.on_message_updated(thread_key)
+        except Exception as exc:
+            _log.debug("PAKT TX timeout tick error: %s", exc)
+        self.after(30_000, self._pakt_tx_timeout_tick)
 
     def _mesh_tick(self) -> None:
         """Periodic mesh housekeeping (HELLO, route expiry)."""
@@ -1378,6 +1580,9 @@ class HamHatApp(tk.Tk):
                 hw_mode="DigiRig",
                 ptt_serial_port=ptt_serial_port,
             )
+
+        if hw == "PAKT":
+            return None
 
         # --- SA818 path ---
         # Derive port from RadioController client
@@ -1664,6 +1869,9 @@ class HamHatApp(tk.Tk):
         self.auto_identify_and_connect()
 
     def read_version(self) -> None:
+        if self._hw_mode() == "PAKT":
+            self.pakt_read_capabilities()
+            return
         if self._hw_mode() == "DigiRig":
             self._set_status("Version read not available in DigiRig mode."); return
         if not self.radio.connected:
@@ -1678,6 +1886,92 @@ class HamHatApp(tk.Tk):
                 self._evq.put_nowait(_StatusEvt(f"Version error: {exc}"))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def pakt_scan(self) -> None:
+        self.pakt.scan(timeout=8.0)
+
+    def pakt_connect_selected(self) -> None:
+        address = self.pakt_address_var.get().strip()
+        if not address:
+            self._set_status("Select a PAKT device first")
+            return
+        self.pakt.connect(address)
+
+    def pakt_disconnect(self) -> None:
+        self.pakt.disconnect()
+
+    def pakt_read_capabilities(self) -> None:
+        if not self.pakt.is_connected:
+            self._set_status("PAKT not connected")
+            return
+        self.pakt.read_capabilities()
+
+    def pakt_read_config(self) -> None:
+        if not self.pakt.is_connected:
+            self._set_status("PAKT not connected")
+            return
+        self.pakt.read_config()
+
+    def pakt_write_config(self) -> None:
+        if not self.pakt.is_connected:
+            self._set_status("PAKT not connected")
+            return
+        callsign = self.pakt_callsign_var.get().strip().upper()
+        if not callsign:
+            self._set_status("Enter a PAKT callsign first")
+            return
+        if not (1 <= len(callsign) <= 6) or not re.fullmatch(r"[A-Z0-9\-]+", callsign):
+            self._set_status("PAKT callsign must be 1-6 chars [A-Z0-9-]")
+            return
+        try:
+            ssid = int(self.pakt_ssid_var.get().strip() or "0")
+        except ValueError:
+            self._set_status("PAKT SSID must be 0-15")
+            return
+        if not (0 <= ssid <= 15):
+            self._set_status("PAKT SSID must be 0-15")
+            return
+        self.pakt.write_config(json.dumps({"callsign": callsign, "ssid": ssid}))
+
+    def pakt_send_tx_request(self, dest: str = "", text: str = "") -> bool:
+        """Validate and submit a PAKT TX request. Returns True if submitted, False on any pre-flight failure."""
+        if not self.pakt.is_connected:
+            self._set_status("PAKT not connected")
+            return False
+        dest = (dest or self.aprs_msg_to_var.get()).strip().upper()
+        text = (text or self.aprs_msg_text_var.get()).strip()
+        if not dest or not text:
+            self._set_status("Enter destination and text for PAKT TX")
+            return False
+        # Validate dest: 1-6 chars [A-Z0-9-] per PAKT contract.
+        if not (1 <= len(dest) <= 6) or not re.fullmatch(r"[A-Z0-9\-]+", dest):
+            self._set_status("PAKT dest must be 1-6 chars [A-Z0-9-]")
+            return False
+        # Validate text: 1-67 printable chars per PAKT contract.
+        if len(text) > 67 or not text.isprintable():
+            self._set_status("PAKT text must be 1-67 printable characters")
+            return False
+        try:
+            ssid = int(self.pakt_ssid_var.get().strip() or "0")
+        except ValueError:
+            self._set_status("PAKT SSID must be 0-15")
+            return False
+        if not (0 <= ssid <= 15):
+            self._set_status("PAKT SSID must be 0-15")
+            return False
+        self.pakt.send_tx_request(dest=dest, text=text, ssid=ssid)
+        return True
+
+    def _apply_pakt_config_to_vars(self, text: str) -> None:
+        try:
+            data = json.loads(text)
+        except Exception:
+            return
+        callsign = str(data.get("callsign", "")).strip().upper()
+        ssid = str(data.get("ssid", 0))
+        if callsign:
+            self.pakt_callsign_var.set(callsign)
+        self.pakt_ssid_var.set(ssid)
 
     def _set_status(self, text: str) -> None:
         self._status_var.set(text)
@@ -1698,6 +1992,10 @@ class HamHatApp(tk.Tk):
         except Exception:
             pass
         # Disconnect radio (quick serial close)
+        try:
+            self.pakt.disconnect()
+        except Exception:
+            pass
         try:
             _close_profile = self._get_current_profile()
             self.radio.release_ptt(

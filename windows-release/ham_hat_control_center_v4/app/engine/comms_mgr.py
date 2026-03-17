@@ -8,6 +8,7 @@ the UI registers callbacks to receive updates.
 from __future__ import annotations
 
 import re
+import time
 from datetime import datetime
 from typing import Callable, Optional
 
@@ -160,6 +161,76 @@ class CommsManager:
                 msg.delivered = True
                 return msg.thread_key
         return None
+
+    def mark_pakt_tx_result(self, msg_id: str, status: str) -> Optional[str]:
+        """Apply a PAKT tx_result update to the matching outbound message.
+
+        If the firmware-assigned msg_id is not known yet, remap the oldest
+        unresolved PAKT placeholder message to this msg_id first.
+        """
+        mid = msg_id.strip()
+        st = status.strip().lower()
+        if not mid:
+            return None
+
+        msg = None
+        for candidate in reversed(self._messages):
+            if candidate.direction != "TX" or candidate.backend != "PAKT":
+                continue
+            if candidate.msg_id.strip() == mid:
+                msg = candidate
+                break
+
+        if msg is None:
+            for candidate in self._messages:
+                if candidate.direction != "TX" or candidate.backend != "PAKT":
+                    continue
+                if candidate.delivered or candidate.failed:
+                    continue
+                if candidate.msg_id.startswith("pakt-local:"):
+                    candidate.msg_id = mid
+                    msg = candidate
+                    break
+
+        if msg is None:
+            return None
+
+        if st == "acked":
+            msg.delivered = True
+            msg.failed = False
+        elif st in {"timeout", "cancelled", "error"}:
+            msg.delivered = False
+            msg.failed = True
+
+        return msg.thread_key
+
+    def expire_stale_pakt_tx(self, max_age_s: float) -> list[str]:
+        """Mark stale pending PAKT outbound messages as failed.
+
+        Returns the list of thread_key values for expired messages so the UI
+        can refresh those threads.
+
+        A message is eligible if:
+          - direction == "TX"
+          - backend == "PAKT"
+          - not delivered and not failed
+          - timestamp is older than max_age_s seconds
+        """
+        now = time.monotonic()
+        expired_keys: list[str] = []
+        for msg in self._messages:
+            if msg.direction != "TX":
+                continue
+            if msg.backend != "PAKT":
+                continue
+            if msg.delivered or msg.failed:
+                continue
+            age = now - msg.timestamp
+            if age > max_age_s:
+                msg.failed = True
+                if msg.thread_key:
+                    expired_keys.append(msg.thread_key)
+        return expired_keys
 
     def messages_for_thread(self, thread_key: str) -> list[ChatMessage]:
         return [m for m in self._messages if m.thread_key == thread_key]

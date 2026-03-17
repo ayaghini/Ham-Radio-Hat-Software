@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+"""PAKT BLE UUIDs and constants."""
+
+from __future__ import annotations
+
+DEVICE_NAME_PREFIX = "PAKT"
+
+_B = "544e4332-8a48-4328-9844-3f5c{:08x}"
+
+UUID_DEV_CONFIG = _B.format(0xA0010000)
+UUID_DEV_COMMAND = _B.format(0xA0020000)
+UUID_DEV_STATUS = _B.format(0xA0030000)
+UUID_DEV_CAPS = _B.format(0xA0040000)
+UUID_RX_PACKET = _B.format(0xA0100000)
+UUID_TX_REQUEST = _B.format(0xA0110000)
+UUID_TX_RESULT = _B.format(0xA0120000)
+UUID_GPS_TELEM = _B.format(0xA0210000)
+UUID_POWER_TELEM = _B.format(0xA0220000)
+UUID_SYS_TELEM = _B.format(0xA0230000)
+
+UUID_MANUFACTURER = "00002a29-0000-1000-8000-00805f9b34fb"
+UUID_MODEL_NUM = "00002a24-0000-1000-8000-00805f9b34fb"
+UUID_FW_REV = "00002a26-0000-1000-8000-00805f9b34fb"
+
+NOTIFY_UUIDS: dict[str, str] = {
+    "device_status": UUID_DEV_STATUS,
+    "rx_packet": UUID_RX_PACKET,
+    "tx_result": UUID_TX_RESULT,
+    "gps_telem": UUID_GPS_TELEM,
+    "power_telem": UUID_POWER_TELEM,
+    "system_telem": UUID_SYS_TELEM,
+}
+
+MAX_RECONNECT_ATTEMPTS = 3
+RECONNECT_DELAY_S = 1.0

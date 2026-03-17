@@ -102,6 +102,11 @@ def _profile_to_dict(p: AppProfile) -> dict:
         "chat_intro_note": p.chat_intro_note,
         "hardware_mode": p.hardware_mode,
         "digirig_port": p.digirig_port,
+        "pakt_device_name": p.pakt_device_name,
+        "pakt_device_address": p.pakt_device_address,
+        "pakt_callsign": p.pakt_callsign,
+        "pakt_ssid": p.pakt_ssid,
+        "pakt_capabilities_summary": p.pakt_capabilities_summary,
         # Mesh (Test)
         "mesh_test_enabled": p.mesh_test_enabled,
         "mesh_node_role": p.mesh_node_role,
@@ -199,8 +204,13 @@ def _dict_to_profile(d: dict) -> AppProfile:
     p.chat_intro_note = _str("chat_intro_note", AppProfile.chat_intro_note)
 
     hw = _str("hardware_mode", AppProfile.hardware_mode)
-    p.hardware_mode = hw if hw in ("SA818", "DigiRig") else "SA818"
+    p.hardware_mode = hw if hw in ("SA818", "DigiRig", "PAKT") else "SA818"
     p.digirig_port = _str("digirig_port", AppProfile.digirig_port)
+    p.pakt_device_name = _str("pakt_device_name", AppProfile.pakt_device_name)
+    p.pakt_device_address = _str("pakt_device_address", AppProfile.pakt_device_address)
+    p.pakt_callsign = _str("pakt_callsign", AppProfile.pakt_callsign)
+    p.pakt_ssid = _int("pakt_ssid", AppProfile.pakt_ssid, 0, 15)
+    p.pakt_capabilities_summary = _str("pakt_capabilities_summary", AppProfile.pakt_capabilities_summary)
 
     # Mesh (Test)
     p.mesh_test_enabled = _bool("mesh_test_enabled", AppProfile.mesh_test_enabled)
