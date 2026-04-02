@@ -168,7 +168,8 @@ class MeshTab(ttk.Frame):
         cols = ("destination", "next_hop", "hops", "metric",
                 "age_s", "expires_in_s", "learned_from", "pinned")
         self._route_tree = ttk.Treeview(
-            lf, columns=cols, show="headings", height=6,
+            lf, columns=cols, show="headings",
+            height=self._app.display_cfg.route_tree_height,
             selectmode="browse",
         )
         col_widths = {
@@ -251,9 +252,10 @@ class MeshTab(ttk.Frame):
                       foreground="#aaaaaa").grid(
                 row=r, column=c, sticky="w", padx=(0, 10), pady=1)
 
-        # Bounded log
+        # Bounded log — height from DisplayConfig (shorter on RPi)
         self._mesh_log = BoundedLog(
-            lf, height=6, width=40, state="disabled",
+            lf, height=self._app.display_cfg.mesh_log_height,
+            width=40, state="disabled",
             font=("TkFixedFont", 8), wrap="word",
         )
         self._mesh_log.grid(row=1, column=0, sticky="nsew", pady=(0, 0))

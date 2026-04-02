@@ -88,11 +88,11 @@ def install_sa818_package(target_root: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Bootstrap HAM HAT Control Center v2 dependencies")
+    parser = argparse.ArgumentParser(description="Bootstrap HAM HAT Control Center v4 dependencies")
     parser.add_argument("--offline", action="store_true",
                         help="Use only local resource snapshots (no internet required)")
     parser.add_argument("--dev", action="store_true",
-                        help="Also install pycaw for Windows audio volume control")
+                        help="Also install pycaw (Windows-only audio volume control; skip on macOS/Linux)")
     parser.add_argument("--target", default="third_party",
                         help="Directory for cloned third-party repos (default: third_party/)")
     args = parser.parse_args()

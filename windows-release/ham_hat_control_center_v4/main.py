@@ -39,6 +39,49 @@ def main() -> int:
         default=0,
         help="Increase verbosity. -v for INFO, -vv for DEBUG.",
     )
+    parser.add_argument(
+        "--rpi",
+        action="store_true",
+        default=False,
+        help=(
+            "Raspberry Pi / small-screen mode.  Optimised for a 5-inch "
+            "1280×720 display: sets window geometry to 1280x720+0+0, "
+            "increases tk scaling to 1.5, and reduces widget heights to fit "
+            "the 720 px vertical budget.  Implies --geometry 1280x720+0+0 "
+            "and --scale 1.5 unless overridden."
+        ),
+    )
+    parser.add_argument(
+        "--scale",
+        type=float,
+        default=None,
+        metavar="FACTOR",
+        help=(
+            "Override the Tkinter scaling factor (default: 1.0 on desktop, "
+            "1.5 with --rpi).  Higher values make all widgets larger; useful "
+            "for small high-DPI screens where X11 reports the wrong DPI."
+        ),
+    )
+    parser.add_argument(
+        "--geometry",
+        type=str,
+        default=None,
+        metavar="WxH+X+Y",
+        help=(
+            "Override the initial window geometry, e.g. '1280x720+0+0'. "
+            "Default: window manager decides."
+        ),
+    )
+    parser.add_argument(
+        "--fullscreen",
+        action="store_true",
+        default=False,
+        help=(
+            "Start in full-screen mode (removes OS window chrome completely). "
+            "Recommended for dedicated RPi displays with no window manager. "
+            "Mutually exclusive with --geometry."
+        ),
+    )
     args = parser.parse_args()
 
     # Each -v flag decreases the log level by 10
@@ -49,11 +92,19 @@ def main() -> int:
 
     try:
         from app.app import HamHatApp
+        from app.engine.display_config import DisplayConfig
     except ImportError as exc:
         print(f"Import error - is your virtualenv active?\n{exc}", file=sys.stderr)
         return 1
 
-    app = HamHatApp(app_dir=_HERE)
+    display_cfg = DisplayConfig.from_args(
+        rpi=args.rpi,
+        scale=args.scale,
+        geometry=args.geometry,
+        fullscreen=args.fullscreen,
+    )
+
+    app = HamHatApp(app_dir=_HERE, display_cfg=display_cfg)
     app.mainloop()
     return 0
 

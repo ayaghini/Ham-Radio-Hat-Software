@@ -51,23 +51,26 @@ class CommsTab(ttk.Frame):
     # ------------------------------------------------------------------
 
     def _build_left(self, parent: ttk.Frame) -> None:
+        cfg = self._app.display_cfg
+        _sp = cfg.compact_padding
+        _mf = cfg.mono_font
         _canvas, _vsb, inner = scrollable_frame(parent)
         inner.columnconfigure(0, weight=1)
         row = 0
 
         # ---- APRS Source ----
         sf = ttk.LabelFrame(inner, text="APRS Source", padding=6)
-        sf.grid(row=row, column=0, sticky="ew", pady=(0, 6))
+        sf.grid(row=row, column=0, sticky="ew", pady=(0, _sp))
         sf.columnconfigure(1, weight=1)
         row += 1
 
         ttk.Label(sf, text="Callsign:").grid(row=0, column=0, sticky="w")
         ttk.Entry(sf, textvariable=self._app.aprs_source_var, width=16,
-                  font=("Consolas", 9)).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+                  font=(_mf, 9)).grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
         # ---- RX Monitor ----
         rf = ttk.LabelFrame(inner, text="RX Monitor", padding=6)
-        rf.grid(row=row, column=0, sticky="ew", pady=(0, 6))
+        rf.grid(row=row, column=0, sticky="ew", pady=(0, _sp))
         rf.columnconfigure(0, weight=1)
         row += 1
 
@@ -101,12 +104,12 @@ class CommsTab(ttk.Frame):
 
         # ---- Contacts ----
         lf = ttk.LabelFrame(inner, text="Contacts  (click to open thread)", padding=6)
-        lf.grid(row=row, column=0, sticky="ew", pady=(0, 6))
+        lf.grid(row=row, column=0, sticky="ew", pady=(0, _sp))
         lf.columnconfigure(0, weight=1)
         row += 1
 
-        self._contacts_lb = tk.Listbox(lf, height=6, exportselection=False,
-                                       font=("Consolas", 9))
+        self._contacts_lb = tk.Listbox(lf, height=cfg.contacts_height,
+                                       exportselection=False, font=(_mf, 9))
         self._contacts_lb.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 4))
         self._contacts_lb.bind("<<ListboxSelect>>", self._on_contact_select)
 
@@ -121,12 +124,12 @@ class CommsTab(ttk.Frame):
 
         # ---- Groups ----
         gf = ttk.LabelFrame(inner, text="Groups  (click to open thread)", padding=6)
-        gf.grid(row=row, column=0, sticky="ew", pady=(0, 6))
+        gf.grid(row=row, column=0, sticky="ew", pady=(0, _sp))
         gf.columnconfigure(0, weight=1)
         row += 1
 
-        self._groups_lb = tk.Listbox(gf, height=4, exportselection=False,
-                                     font=("Consolas", 9))
+        self._groups_lb = tk.Listbox(gf, height=cfg.groups_height,
+                                     exportselection=False, font=(_mf, 9))
         self._groups_lb.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 4))
         self._groups_lb.bind("<<ListboxSelect>>", self._on_group_select)
 
@@ -141,17 +144,17 @@ class CommsTab(ttk.Frame):
 
         self._group_members_var = tk.StringVar(value="")
         ttk.Label(gf, textvariable=self._group_members_var, foreground="#9cc4dd",
-                  font=("Consolas", 8), wraplength=230).grid(
+                  font=(_mf, 8), wraplength=230).grid(
             row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         # ---- Heard Stations ----
         hf = ttk.LabelFrame(inner, text="Heard Stations  (click to open thread)", padding=6)
-        hf.grid(row=row, column=0, sticky="ew", pady=(0, 6))
+        hf.grid(row=row, column=0, sticky="ew", pady=(0, _sp))
         hf.columnconfigure(0, weight=1)
         row += 1
 
-        self._heard_lb = tk.Listbox(hf, height=5, exportselection=False,
-                                    font=("Consolas", 9))
+        self._heard_lb = tk.Listbox(hf, height=cfg.heard_height,
+                                    exportselection=False, font=(_mf, 9))
         self._heard_lb.grid(row=0, column=0, sticky="ew", pady=(0, 4))
         self._heard_lb.bind("<<ListboxSelect>>", self._on_heard_select)
         ttk.Button(hf, text="Clear Heard", command=self._clear_heard).grid(
@@ -159,7 +162,7 @@ class CommsTab(ttk.Frame):
 
         # ---- Intro + Position TX ----
         inf = ttk.LabelFrame(inner, text="Intro / Position TX", padding=6)
-        inf.grid(row=row, column=0, sticky="ew", pady=(0, 6))
+        inf.grid(row=row, column=0, sticky="ew", pady=(0, _sp))
         inf.columnconfigure(1, weight=1)
         row += 1
 
@@ -184,6 +187,9 @@ class CommsTab(ttk.Frame):
     # ------------------------------------------------------------------
 
     def _build_right(self, parent: ttk.Frame) -> None:
+        cfg = self._app.display_cfg
+        _sp = cfg.compact_padding
+        _mf = cfg.mono_font
         parent.columnconfigure(0, weight=1)
         parent.rowconfigure(0, weight=0)  # map
         parent.rowconfigure(1, weight=1)  # messages
@@ -192,10 +198,10 @@ class CommsTab(ttk.Frame):
 
         # ---- Stations Map ----
         mf = ttk.LabelFrame(parent, text="Stations Map", padding=6)
-        mf.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        mf.grid(row=0, column=0, sticky="ew", pady=(0, _sp))
         mf.columnconfigure(0, weight=1)
 
-        self._aprs_map = TiledMapCanvas(mf, self._app.tiles, height=180)
+        self._aprs_map = TiledMapCanvas(mf, self._app.tiles, height=cfg.map_height)
         self._aprs_map.grid(row=0, column=0, sticky="ew")
         self._aprs_map.set_on_pick(
             lambda lat, lon, label: self.append_log(
@@ -212,7 +218,7 @@ class CommsTab(ttk.Frame):
 
         # ---- Message area ----
         msf = ttk.LabelFrame(parent, text="Messages", padding=6)
-        msf.grid(row=1, column=0, sticky="nsew", pady=(0, 4))
+        msf.grid(row=1, column=0, sticky="nsew", pady=(0, _sp))
         msf.columnconfigure(0, weight=1)
         msf.rowconfigure(1, weight=1)
 
@@ -222,20 +228,20 @@ class CommsTab(ttk.Frame):
         self._thread_label.grid(row=0, column=0, sticky="w", pady=(0, 4))
 
         self._msg_log = BoundedLog(msf, state="disabled", wrap="word",
-                                   font=("Consolas", 9), background="#0f2531",
-                                   foreground="#d9edf7", height=10)
+                                   font=(_mf, 9), background="#0f2531",
+                                   foreground="#d9edf7", height=cfg.log_height_comms)
         self._msg_log.grid(row=1, column=0, sticky="nsew")
 
         # Chat-bubble colour tags.
         # TX (right side): sender name muted blue, message body light blue.
         # RX (left side): sender name muted amber, message body amber.
         self._msg_log.tag_configure("tx_name", foreground="#4a7a9b",
-                                    font=("Consolas", 8), justify="right", spacing1=10)
+                                    font=(_mf, 8), justify="right", spacing1=10)
         self._msg_log.tag_configure("tx_msg",  foreground="#cce8f8", justify="right")
         self._msg_log.tag_configure("tx_ok",   foreground="#5dba6e", justify="right")
         self._msg_log.tag_configure("tx_fail", foreground="#e07070", justify="right")
         self._msg_log.tag_configure("rx_name", foreground="#b07020",
-                                    font=("Consolas", 8), justify="left", spacing1=10)
+                                    font=(_mf, 8), justify="left", spacing1=10)
         self._msg_log.tag_configure("rx_msg",  foreground="#f5a623", justify="left")
         self._msg_log.tag_configure("sys",     foreground="#9cc4dd", justify="center",
                                     spacing1=4, spacing3=4)
@@ -243,10 +249,11 @@ class CommsTab(ttk.Frame):
 
         # ---- Compose area ----
         cf = ttk.LabelFrame(parent, text="Send Message", padding=6)
-        cf.grid(row=2, column=0, sticky="ew", pady=(0, 4))
+        cf.grid(row=2, column=0, sticky="ew", pady=(0, _sp))
         cf.columnconfigure(0, weight=1)
 
-        self._compose_text = tk.Text(cf, height=3, wrap="word", font=("Consolas", 9))
+        self._compose_text = tk.Text(cf, height=cfg.compose_height,
+                                     wrap="word", font=(_mf, 9))
         self._compose_text.grid(row=0, column=0, sticky="ew", pady=(0, 4))
         self._compose_text.bind("<Return>", self._on_compose_enter)
         self._compose_text.bind("<Shift-Return>", lambda _e: None)
@@ -265,9 +272,9 @@ class CommsTab(ttk.Frame):
         lf.columnconfigure(0, weight=1)
         lf.rowconfigure(0, weight=1)
 
-        self._aprs_log_box = BoundedLog(lf, height=5, state="disabled",
-                                        font=("Consolas", 8), background="#0a1a22",
-                                        foreground="#9cc4dd")
+        self._aprs_log_box = BoundedLog(lf, height=cfg.log_height_aprs,
+                                        state="disabled", font=(_mf, 8),
+                                        background="#0a1a22", foreground="#9cc4dd")
         self._aprs_log_box.grid(row=0, column=0, sticky="nsew")
 
     # ------------------------------------------------------------------

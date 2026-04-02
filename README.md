@@ -6,29 +6,63 @@ Desktop control software for the uConsole HAM HAT ecosystem, including SA818 rad
 
 ## Executive Summary
 
-This repository currently centers on `windows-release/ham_hat_control_center_v4`, which is the active desktop app and the current primary development target.
+This repository now centers on [`windows-release/ham_hat_control_center_v4`](windows-release/ham_hat_control_center_v4), which is the active desktop app and the current source of truth for new work.
 
-Recent project work has focused on:
+### Program Snapshot
 
-- stabilizing and auditing the v4 app as a whole
-- adding `PAKT` as the third supported hardware mode alongside `SA818` and `DigiRig`
-- improving whole-app integrity around mode switching, status handling, startup behavior, and optional dependencies
-- documenting the current state of the PAKT integration and its remaining hardware-dependent validation gaps
-- preparing a structured cross-platform migration program for future macOS, Linux, and Raspberry Pi support
+| Area | Status | Notes |
+|---|---|---|
+| Core `v4` app | Active | Main desktop app, primary development target |
+| `PAKT` hardware mode | Implemented | Native BLE-backed third mode alongside `SA818` and `DigiRig` |
+| Whole-app integrity | Stronger | Recent passes fixed mode switching, status routing, startup behavior, and script validation gaps |
+| Cross-platform runtime prep | In progress | macOS/Linux/RPi support work is now implemented in the `v4` codebase, with docs and audit trail updated |
+| Real hardware validation | Pending | macOS desktop, Linux desktop, Raspberry Pi 5-inch screen, and PAKT BLE hardware still need live validation |
+| Packaging verification | Pending | Packaging strategies are documented; real build/exit-check runs still remain |
 
-Current high-level status:
+### Progress View
 
-- `v4` is the main app and has received the latest fixes and audits
-- `PAKT` is integrated as a native BLE-backed third platform in the v4 app
-- recent integrity passes improved app behavior, diagnostics, script validation, and dependency fallback behavior
-- cross-platform implementation has not started yet, but a full migration roadmap and agent handoff workspace now exist under `cross-platform-v4/`
-- Raspberry Pi support exists in `pi-release/`, but it is behind the Windows `v4` app in features and architecture
+```text
+v4 app integrity            [##########] 100%
+PAKT integration            [#########-]  90%
+Cross-platform code prep    [########--]  80%
+Smoke / CI coverage         [#######---]  70%
+Real-device validation      [##--------]  20%
+Packaging verification      [##--------]  20%
+```
 
-Important current planning and audit locations:
+### What Changed Recently
 
-- PAKT integration docs: `integrations/pakt/`
-- v4 whole-app audit: `windows-release/ham_hat_control_center_v4/audit_v4.md`
-- cross-platform migration program: `cross-platform-v4/`
+- stabilized `v4` as the main app and central handoff target
+- integrated `PAKT` as a first-class hardware mode in the desktop app
+- improved mode switching, startup behavior, diagnostics, and optional dependency handling
+- implemented cross-platform prep in the `v4` codebase for macOS, Linux, and Raspberry Pi
+- fixed the biggest preflight portability blockers:
+  - legacy profile migration into the new user-data location
+  - PAKT config cache migration out of the install tree
+  - Windows worker capture temp audio migration out of the install tree
+  - Linux/RPi map wheel support
+  - safer sparse-environment smoke behavior plus guard-only CI coverage
+
+### Current Focus
+
+The next useful session should start with real validation, not more planning:
+
+1. macOS desktop GUI startup and workflow checks
+2. Linux desktop GUI startup and device enumeration checks
+3. Raspberry Pi 5-inch screen validation with `python3 main.py --rpi`
+4. PAKT BLE hardware validation on real devices
+5. Packaging/build verification against the documented release checklist
+
+### Best Jump-In Files
+
+| Purpose | File |
+|---|---|
+| Canonical audit / handoff | [`windows-release/ham_hat_control_center_v4/audit_v4.md`](windows-release/ham_hat_control_center_v4/audit_v4.md) |
+| Cross-platform roadmap | [`cross-platform-v4/roadmap.md`](cross-platform-v4/roadmap.md) |
+| Cross-platform task tracker | [`cross-platform-v4/task-board.md`](cross-platform-v4/task-board.md) |
+| Validation checklist | [`cross-platform-v4/validation-plan.md`](cross-platform-v4/validation-plan.md) |
+| Support boundaries | [`cross-platform-v4/support-matrix.md`](cross-platform-v4/support-matrix.md) |
+| PAKT workspace | [`integrations/pakt/`](integrations/pakt/) |
 
 ## Repository Layout
 
@@ -68,12 +102,13 @@ Recent integrity and audit work on `v4` included:
 - whole-app fixes for footer connection state, hardware-mode switching, startup population of shared UI state, and optional dependency fallback
 - improved handling for stale pending PAKT outbound messages
 - script validation hardening for selected support/diagnostic scripts
+- cross-platform prep fixes for macOS/Linux/RPi startup, path handling, and screen/layout behavior
 
 Known current limitations:
 
 - real PAKT BLE hardware validation is still required for full confidence in scan/connect, bonded writes, TX result sequencing, and live telemetry behavior
 - structured PAKT telemetry UI remains basic and is currently surfaced mainly via status/log output
-- the cross-platform migration plan is documented, but macOS/Linux/Raspberry Pi parity work has not yet begun in the v4 codebase
+- cross-platform code preparation is in place, but real macOS/Linux/Raspberry Pi validation is still pending
 
 ### Raspberry Pi
 
@@ -88,7 +123,7 @@ Known current limitations:
 - PAKT integration planning, implementation notes, and audit history are maintained under `integrations/pakt/`.
 - Whole-app v4 integrity findings and fixes are tracked in `windows-release/ham_hat_control_center_v4/audit_v4.md`.
 - A structured cross-platform migration program for macOS, Linux, and Raspberry Pi now exists under `cross-platform-v4/`.
-- Raspberry Pi software is currently behind the Windows `v4` feature set and needs to be updated.
+- Raspberry Pi legacy software in `pi-release/` is behind the main `v4` app; current portability work is happening in `windows-release/ham_hat_control_center_v4`, not by extending the old Pi package first.
 
 ## Quick Start
 

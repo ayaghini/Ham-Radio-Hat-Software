@@ -1,5 +1,41 @@
 #!/usr/bin/env python3
-"""PAKT BLE transport."""
+"""PAKT BLE transport.
+
+Cross-platform BLE requirements (CP-102)
+-----------------------------------------
+bleak is cross-platform and handles the underlying OS BLE stack, but each
+platform has additional requirements that must be met before scanning and
+connecting will work:
+
+Windows (WinRT BLE)
+  - Windows 10 version 1709+ is required for bleak's WinRT backend.
+  - No special permissions are needed for scanning on modern Windows 10/11.
+  - Bonded device pairing is handled by the OS pairing dialog.
+
+macOS (CoreBluetooth)
+  - The first BleakScanner.discover() call will trigger an OS permission
+    prompt: "Allow <app> to use Bluetooth?". If denied, the scan returns an
+    empty list with no error.
+  - Packaged .app bundles MUST include NSBluetoothAlwaysUsageDescription in
+    their Info.plist (required since macOS 12+; absence causes a crash on
+    first BLE access).
+  - The key to add to Info.plist:
+      <key>NSBluetoothAlwaysUsageDescription</key>
+      <string>HAM HAT Control Center uses Bluetooth to connect to the PAKT TNC.</string>
+  - BLE device addresses on macOS are UUIDs (not MAC addresses); the stored
+    pakt_device_address may differ from the address shown on Windows.
+
+Linux / Raspberry Pi OS (BlueZ via D-Bus)
+  - BlueZ must be installed and running: `systemctl status bluetooth`
+  - The user must be in the `bluetooth` group, OR a polkit rule must grant
+    access, OR the process must run as root.
+  - To add a user to the bluetooth group: `sudo usermod -aG bluetooth $USER`
+  - On Raspberry Pi OS, Bluetooth is enabled by default; group membership is
+    still required for non-root BLE access.
+  - BlueZ version 5.43+ is required; check with: `bluetoothctl --version`
+  - If scan returns empty on Linux, run `bluetoothctl scan on` to verify the
+    adapter works outside the app before debugging bleak.
+"""
 
 from __future__ import annotations
 
@@ -43,6 +79,10 @@ class PaktBleTransport:
         self._address = ""
         self._user_disconnected = False
         self._reconnect_task: Optional[asyncio.Task] = None
+        # Captured from the running event loop during connect() so that
+        # _on_disconnect can safely schedule reconnect via call_soon_threadsafe
+        # regardless of which thread bleak invokes the callback from.
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     @property
     def state(self) -> TransportState:
@@ -87,6 +127,11 @@ class PaktBleTransport:
             raise RuntimeError("bleak is not installed")
         if self._reconnect_task and not self._reconnect_task.done():
             self._reconnect_task.cancel()
+        # Capture the event loop here — we are running inside it (called via
+        # run_coroutine_threadsafe from PaktService).  Storing the reference
+        # lets _on_disconnect schedule reconnect safely via call_soon_threadsafe
+        # regardless of which thread bleak delivers the callback from.
+        self._loop = asyncio.get_running_loop()
         self._address = address
         self._user_disconnected = False
         self._set_state(TransportState.CONNECTING, f"connecting to {address}")
@@ -107,7 +152,24 @@ class PaktBleTransport:
         if self._user_disconnected:
             return
         self._set_state(TransportState.RECONNECTING, "connection lost - reconnecting")
-        self._reconnect_task = asyncio.ensure_future(self._reconnect())
+        if self._loop is not None:
+            # Use call_soon_threadsafe so this is always safe regardless of
+            # which thread bleak delivers the callback from (CoreBluetooth
+            # dispatch queue on macOS, D-Bus thread on Linux, etc.).
+            self._loop.call_soon_threadsafe(self._create_reconnect_task)
+        else:
+            # Fallback: assume we are already inside the event loop (Windows
+            # WinRT path with older bleak where _loop may not be set yet).
+            self._reconnect_task = asyncio.ensure_future(self._reconnect())
+
+    def _create_reconnect_task(self) -> None:
+        """Schedule the reconnect coroutine as a Task on the event loop.
+
+        Always called from within the event loop via call_soon_threadsafe,
+        so create_task is safe here.
+        """
+        if not self._user_disconnected and self._loop is not None:
+            self._reconnect_task = self._loop.create_task(self._reconnect())
 
     async def _reconnect(self) -> None:
         for attempt in range(1, MAX_RECONNECT_ATTEMPTS + 1):

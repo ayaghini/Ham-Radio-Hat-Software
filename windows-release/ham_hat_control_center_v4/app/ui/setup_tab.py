@@ -12,6 +12,7 @@ Sections:
 
 from __future__ import annotations
 
+import platform as _platform
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import TYPE_CHECKING
@@ -289,17 +290,20 @@ class SetupTab(ttk.Frame):
         ttk.Button(bf, text="Run Two-Radio Diagnostic",
                    command=self._two_radio_diagnostic).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-        # ---- TTS / Speech (optional) ----
-        tsf = ttk.LabelFrame(inner, text="Text-to-Speech (optional, Windows only)", padding=8)
-        tsf.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
-        row += 1
-
+        # ---- TTS / Speech (Windows only) ----
+        # Only shown on Windows — the backend uses PowerShell SpeechSynthesizer
+        # which is not available on Linux/macOS/RPi.
         self._tts_enabled_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(tsf, text="Announce received APRS messages via TTS",
-                        variable=self._tts_enabled_var).pack(anchor="w")
-        ttk.Label(tsf,
-                  text="Uses Windows PowerShell SpeechSynthesizer.\nRequires no additional dependencies.",
-                  foreground="#9cc4dd", font=("TkDefaultFont", 8)).pack(anchor="w", pady=(4, 0))
+        if _platform.system().lower() == "windows":
+            tsf = ttk.LabelFrame(inner, text="Text-to-Speech (optional, Windows only)", padding=8)
+            tsf.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+            row += 1
+
+            ttk.Checkbutton(tsf, text="Announce received APRS messages via TTS",
+                            variable=self._tts_enabled_var).pack(anchor="w")
+            ttk.Label(tsf,
+                      text="Uses Windows PowerShell SpeechSynthesizer.\nRequires no additional dependencies.",
+                      foreground="#9cc4dd", font=("TkDefaultFont", 8)).pack(anchor="w", pady=(4, 0))
 
     # ------------------------------------------------------------------
     # Action handlers

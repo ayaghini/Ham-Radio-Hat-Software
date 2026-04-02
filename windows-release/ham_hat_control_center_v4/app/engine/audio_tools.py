@@ -36,7 +36,12 @@ def _list_devices(direction: str) -> list[tuple[int, str]]:
     """Enumerate audio devices filtered by direction ('input' or 'output').
 
     Returns list of (device_index, display_name) sorted by name.
-    Favours WASAPI → MME; excludes DirectSound and Sound Mapper duplicates.
+    Cross-platform host API preference order:
+      rank 0 – Windows WASAPI, macOS Core Audio, Linux ALSA, Linux PipeWire
+      rank 1 – Windows MME
+      rank 2 – WDM-KS, JACK Audio Connection Kit
+      rank 3 – everything else (fallback)
+    Excludes Windows DirectSound and Sound Mapper entries (duplicates).
     """
     if sd is None:
         return []
@@ -49,16 +54,33 @@ def _list_devices(direction: str) -> list[tuple[int, str]]:
     except Exception:
         return []
 
+    # Host APIs that should be excluded outright (Windows duplicates)
+    _EXCLUDED_HOST_APIS = {"Windows DirectSound"}
+
+    # Preferred host API rank by platform:
+    #   0 = best (WASAPI on Windows, Core Audio on macOS, ALSA/PipeWire on Linux)
+    #   1 = secondary (MME on Windows)
+    #   2 = low-level / pro audio (WDM-KS, JACK)
+    #   3 = everything else
+    _HOST_API_RANK: dict[str, int] = {
+        "Windows WASAPI": 0,        # Windows: preferred
+        "Core Audio": 0,            # macOS: preferred
+        "ALSA": 0,                  # Linux: common system default
+        "PipeWire": 0,              # Linux: modern (preferred over ALSA where present)
+        "MME": 1,                   # Windows: secondary
+        "JACK Audio Connection Kit": 2,
+    }
+
     ranked: list[tuple[int, int, str, str]] = []
     for idx, dev in enumerate(devices):
         if not dev.get(ch_key, 0):
             continue
         ha_idx = int(dev.get("hostapi", 0))
         ha_name = str(hostapis[ha_idx].get("name", "Unknown")) if ha_idx < len(hostapis) else "Unknown"
-        if ha_name == "Windows DirectSound":
+        if ha_name in _EXCLUDED_HOST_APIS:
             continue
         name = str(dev.get("name", f"Device {idx}"))
-        rank = {"Windows WASAPI": 0, "MME": 1}.get(ha_name, 3 if "WDM" not in ha_name else 2)
+        rank = _HOST_API_RANK.get(ha_name, 3 if "WDM" not in ha_name else 2)
         ranked.append((rank, idx, name, ha_name))
 
     ranked.sort(key=lambda x: (x[0], x[1]))

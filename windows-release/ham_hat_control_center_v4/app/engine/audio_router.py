@@ -37,8 +37,9 @@ from .models import AudioConfig, PttConfig
 class AudioRouter:
     """Manages output/input device selection, PTT keying, and audio playback."""
 
-    def __init__(self, app_dir: Path) -> None:
+    def __init__(self, app_dir: Path, audio_dir: Optional[Path] = None) -> None:
         self._app_dir = app_dir
+        self._audio_dir = audio_dir or (app_dir / "audio_out")
         self._lock = threading.Lock()
         self._worker: Optional[threading.Thread] = None
         self._tx_active = False
@@ -91,8 +92,19 @@ class AudioRouter:
             if out_match is not None and in_match is not None:
                 return out_match, in_match
 
-        # 2) Unique USB pair — matches SA818 ("usb audio device") and DigiRig ("usb pnp sound device")
-        _USB_KW = ("usb audio device", "usb pnp sound device", "digirig")
+        # 2) Unique USB pair — USB audio device name keywords by platform:
+        #    Windows MME/WASAPI : "usb audio device" (SA818), "usb pnp sound device" (DigiRig CP2102)
+        #    macOS Core Audio   : "usb audio codec" (SA818 generic), "usb audio" (broad match)
+        #    Linux ALSA         : "usb audio" (USB Audio Class generic)
+        #    All platforms      : "digirig" (explicit DigiRig identification)
+        _USB_KW = (
+            "usb audio device",      # Windows: SA818 USB codec (MME/WASAPI name)
+            "usb pnp sound device",  # Windows: DigiRig CP2102 (MME name)
+            "usb audio codec",       # macOS: SA818 and generic USB codecs (Core Audio name)
+            "usb audio",             # macOS + Linux: broad USB Audio Class match
+            "usb sound",             # Linux: alternate USB audio class name
+            "digirig",               # All: DigiRig explicit match
+        )
 
         def _is_usb_audio(name: str) -> bool:
             nl = name.lower()
@@ -103,11 +115,16 @@ class AudioRouter:
         if len(usb_outs) == 1 and len(usb_ins) == 1:
             return usb_outs[0][0], usb_ins[0][0]
 
-        # 3) Shared USB token
+        # 3) Shared USB token — Windows MME device names include a parenthesised
+        #    suffix like "(USB Audio Device 2)" that can be used to pair the
+        #    output and input entries for the same physical device.
+        #    On macOS and Linux, device names do not follow this pattern; this
+        #    strategy is a no-op on those platforms and strategy 2 (unique pair)
+        #    is the primary cross-platform path.
         import re
         def usb_token(name: str) -> str:
             m = re.search(
-                r"\(([^)]*(?:usb audio device|usb pnp sound device|digirig)[^)]*)\)",
+                r"\(([^)]*(?:usb audio|usb pnp sound device|usb sound|digirig)[^)]*)\)",
                 name, flags=re.IGNORECASE,
             )
             return m.group(1).strip().lower() if m else ""
@@ -209,7 +226,8 @@ class AudioRouter:
         on_worker = _t.current_thread() is not _t.main_thread()
 
         if on_windows and on_worker:
-            ts_path = wav_out_path or (self._app_dir / "audio_out" / f"rx_cap_{id(threading.current_thread())}.wav")
+            ts_path = wav_out_path or (self._audio_dir / f"rx_cap_{id(threading.current_thread())}.wav")
+            ts_path.parent.mkdir(parents=True, exist_ok=True)
             _capture_wav_subprocess(ts_path, seconds, device_index, self._app_dir)
             with wave.open(str(ts_path), "rb") as wf:
                 rate = int(wf.getframerate())

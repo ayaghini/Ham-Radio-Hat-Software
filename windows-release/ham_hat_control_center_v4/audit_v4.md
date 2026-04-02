@@ -1,230 +1,188 @@
-# v4 App Integrity Audit
+# v4 App Audit
 
-Date: 2026-03-16
-Scope: whole `windows-release/ham_hat_control_center_v4` app — all hardware modes, all flows.
-Prior scope: `integrations/pakt/audit.md` covers PAKT-only findings from the earlier PAKT integration passes.
+Updated: 2026-04-01
+Scope: canonical audit for `windows-release/ham_hat_control_center_v4`, including app issues, residual risks, and open script findings.
+Prior history: resolved PAKT-only findings remain documented in `integrations/pakt/audit.md` and `integrations/pakt/roadmap.md`.
 
 ## Verification Run
 
+Reviewed against the current workspace state on 2026-04-01.
+
+Local verification performed:
+
+```text
+python3 -m compileall -q app                         # clean
+python3 scripts/smoke_test.py -v                     # passes; sparse env now classifies missing hard deps as SKIP
+python3 scripts/smoke_test.py -v --guards-only       # passes
 ```
-python3 -m compileall -q <v4 root> <integrations/pakt>   # clean
-python3 main.py --help                                     # green
-```
 
-## Fixed in This Pass
+Notes:
+- `compileall` passed.
+- `smoke_test.py` now behaves safely in sparse environments and supports `--guards-only` for optional-dependency guard coverage.
+- No hardware was available for SA818, DigiRig, or PAKT runtime validation.
 
-### Second Integrity Pass (2026-03-16)
+## Recently Fixed In This Pass
 
-#### SIP-001 — PAKT pending-message host-side timeout (RES-007 resolved)
+### AUD-004 — Existing installs lose their saved profile on upgrade: FIXED
 
-- Files: `app/engine/models.py`, `app/engine/comms_mgr.py`, `app/app.py`
-- Severity: Low (UX gap closed)
+- Files: `app/app_state.py`
 
-Added `timestamp: float = field(default_factory=time.monotonic)` to `ChatMessage` in `models.py`
-(with `import time`). Added `CommsManager.expire_stale_pakt_tx(max_age_s: float) -> list[str]`
-that finds all TX/PAKT/non-terminal messages older than `max_age_s` seconds, marks them
-`failed = True`, and returns their `thread_key` values for UI refresh.
+`AppState` now performs a best-effort migration from the legacy in-tree
+`profiles/last_profile.json` into the new user-data location before creating `ProfileManager`.
 
-Added `HamHatApp._pakt_tx_timeout_tick()` that calls `expire_stale_pakt_tx(120.0)` every 30 s
-and calls `self._comms_tab.on_message_updated(thread_key)` for each expired message. Tick started
-in `__init__` after the other `self.after(...)` calls. 2-minute timeout policy.
-
-#### SIP-002 — PAKT mode audio device list empty on startup (hardware mode switch gap)
+### AUD-005 — PAKT config cache still writes into the install tree: FIXED
 
 - Files: `app/app.py`
-- Severity: Low (empty comboboxes in PAKT mode on first run)
 
-`_startup_auto_tasks` called `refresh_audio_devices()` only in non-PAKT paths. When the app
-started in PAKT mode the audio device comboboxes were left empty for the session.
+The PAKT config cache path now uses the migrated user-data root instead of `app_dir/profiles/`.
 
-Fixed: moved `self._main_tab.refresh_audio_devices()` before the `if hw_mode == "PAKT"` check
-so audio device lists are always populated regardless of hardware mode.
+### AUD-006 — Windows worker-thread audio capture still uses a legacy in-tree temp path: FIXED
 
-#### SIP-003 — PAKT button state not reset on hardware mode switch TO PAKT
+- Files: `app/engine/audio_router.py`
 
-- Files: `app/ui/main_tab.py`
-- Severity: Low (stale button states after mode round-trip)
+`AudioRouter.capture_compatible()` now uses the migrated writable audio directory for Windows
+worker-thread temp WAVs.
 
-When switching away from PAKT and back, `_btn_pakt_connect` / `_btn_pakt_disconnect` retained
-whatever enabled/disabled state was last set by `set_pakt_ble_state()`. A prior CONNECTING or
-CONNECTED state would leave Disconnect enabled and Connect disabled even though no connection
-exists.
+### AUD-007 — Smoke test does not validate the minimal bootstrap environment it claims to cover: IMPROVED
 
-Fixed: `_on_hw_mode_changed` now calls `self.set_pakt_ble_state("IDLE")` when switching TO PAKT
-mode, ensuring buttons start in a clean, known state.
+- Files: `scripts/smoke_test.py`, `.github/workflows/smoke.yml`
 
-#### SIP-004 — FIX 3: `pakt_status_var` and `pakt_last_tx_result_var` not in profile (verified)
+The smoke test now:
+- classifies missing hard runtime dependencies as `SKIP` instead of failing early
+- supports `--guards-only` for sparse-environment optional-dependency validation
 
-- Files: `app/app.py`, `app/ui/main_tab.py`
-- Severity: None (no change needed)
+CI now adds a non-Windows guard-only smoke run in a clean venv with only the hard runtime
+dependencies installed.
 
-Verified `collect_profile` (MainTab) and `_collect_profile_snapshot` (app.py) do not write
-`pakt_status_var` or `pakt_last_tx_result_var` to the profile. These are runtime-only vars.
-`pakt_capabilities_var` is correctly persisted as `pakt_capabilities_summary` (last-known value).
-`apply_profile` in MainTab sets `pakt_capabilities_var` from the saved summary, which is the
-correct "last known" behavior. No code changes required.
+## Open Findings
 
-#### SIP-005 — PAKT telemetry log format and selective status panel updates
+No app-level open findings remain from the 2026-04-01 cross-platform preflight fixes.
 
-- Files: `app/app.py`
-- Severity: Low (UX improvement)
+## Residual Risks Still Open
 
-The `_PaktTelemEvt` dispatcher called `set_pakt_status()` for every telemetry event regardless
-of type, causing rapid-fire telemetry (GPS, power, system telem) to thrash the PAKT status panel.
-
-Fixed: `set_pakt_status()` is now called only for `name in {"device_status", "tx_result"}` — the
-high-signal events. All telemetry still goes to the log with the structured format
-`[PAKT telem/{name}] {text}` instead of the bare `[PAKT] {name}: {text}`.
-
-`_PaktTxEvt` log entry changed from `[PAKT] tx_result: {raw_json}` (raw JSON dump) to the
-structured form `[PAKT tx/{msg_id}] status={status}` for clarity.
-
-#### SIP-006 — `sv_ttk` optional dependency guard in `app.py`
-
-- Files: `app/app.py`
-- Severity: Low (would crash on import if sv_ttk not installed)
-
-`import sv_ttk` was at module level without a guard. If `sv_ttk` is absent (e.g. fresh venv
-without requirements installed) the app would crash at import, preventing SA818/DigiRig users
-from running the app at all.
-
-Fixed: wrapped as `try: import sv_ttk as _sv_ttk except ImportError: _sv_ttk = None`. The
-`set_theme("dark")` call is guarded by `if _sv_ttk is not None:`. App opens with the default
-ttk theme if `sv_ttk` is absent.
-
-Note: `bleak` is already guarded in `transport.py`. `pycaw` is already guarded with
-`except ImportError: pass` in its worker functions. No further changes needed for those.
-
-#### SIP-007 — `two_radio_diagnostic.py` argument validation
-
-- Files: `scripts/two_radio_diagnostic.py`
-- Severity: Medium (zero/negative values caused silent bad behavior)
-
-`--extra-record-sec`, `--serial-loops`, and `--aprs-loops` had no positive-value validation.
-A zero or negative `--extra-record-sec` would cause `sd.rec(0, ...)` or `sd.rec(-N, ...)`,
-producing an empty or invalid recording with no error.
-
-Fixed: added explicit checks after `parse_args()` in `main()` that call `parser.error()`
-for any of the three arguments that are `<= 0`.
-
-### AUD-001 — Footer connection indicator blind to PAKT SCANNING state
-
-- Files: `app/app.py`
-- Severity: Low-Medium (misleading UI)
-
-The `_PaktConnEvt` dispatch handled `CONNECTED`, `CONNECTING`, `RECONNECTING`, `IDLE`, and `ERROR`
-but had no branch for `state == "SCANNING"`. When `PaktBleTransport` entered a scan, the footer
-`_conn_lbl` stayed at whatever it showed before (potentially "🟢 PAKT addr" if a prior connection
-had been made), giving a false "connected" indicator during an active scan.
-
-Fixed: added `elif evt.event.state == "SCANNING":` → `"🔵 PAKT Scanning…"` in `#6ab0e0`.
-
-### AUD-002 — Footer connection indicator not reset on hardware mode switch
-
-- Files: `app/app.py`, `app/ui/main_tab.py`
-- Severity: Low-Medium (stale UI)
-
-When the user changed the Hardware Mode combobox (e.g. SA818 → PAKT), `_on_hw_mode_changed` in
-`MainTab` called only `_apply_hw_mode_visibility()`. The footer `_conn_lbl` inherited whatever
-indicator the previous mode had set (e.g. "🟢 COM3" persisting into PAKT mode).
-
-Fixed:
-- Added `HamHatApp.on_hw_mode_changed()` that resets `_conn_lbl` to `"⚫ Disconnected"`.
-- `MainTab._on_hw_mode_changed` now calls `self._state.on_hw_mode_changed()` after
-  `_apply_hw_mode_visibility()`.
-
-### AUD-003 — DOC_ROOT typo in `generate_agent_onboarding_pack.py`
-
-- Files: `scripts/generate_agent_onboarding_pack.py`
-- Severity: Low (breaks script output path; script not run at app startup)
-
-Three occurrences of `"agent_bootstap"` (missing 'r'). The script writes outputs under this
-incorrectly named directory, so the agent onboarding artifacts end up in the wrong place if the
-script is run.
-
-Fixed: replaced all three occurrences with `"agent_bootstrap"`.
-
-## Pre-existing PAKT Issues Fixed in Earlier Passes
-
-See `integrations/pakt/audit.md` and `integrations/pakt/roadmap.md` for the full record.
-All four original bug-fix pass items, all second-pass items, and all third-pass items are complete.
-
-## Known Residual Risks
-
-### RES-001 — PAKT TX correlation needs hardware validation
+### RES-001 — PAKT TX correlation still needs hardware validation
 
 - Severity: Medium
 - Files: `app/engine/comms_mgr.py`, `app/engine/pakt/service.py`
 
-The host-side `pakt-local:N` → firmware `msg_id` remapping is correct against the documented
-contract and passes local smoke tests. Real-device behavior under retries, reconnects, and
-back-to-back sends has not been exercised.
+The host-side `pakt-local:N` to firmware `msg_id` remapping looks correct by static review and local
+smoke coverage, but it has not been exercised against a real device under retries, reconnects, or
+back-to-back sends.
 
-### RES-002 — All PAKT BLE behavior is hardware-blocked
+### RES-002 — All PAKT BLE runtime behavior remains hardware-blocked
 
 - Severity: Medium
 
-BLE scan, bonded-pairing flow, live TX result sequencing, live telemetry, and reserved endpoints
-all require a physical PAKT device. No hardware was present during any development pass.
+BLE scan, bonded-pairing flow, live TX result sequencing, live telemetry, and reserved endpoints all
+still require a physical PAKT device. No hardware validation was performed in this pass.
 
-### RES-003 — BUG-001/002: callback wiring via post-construction mutation
+### RES-003 — PAKT callback wiring still depends on post-construction mutation
 
-- Severity: Low (no crash path today)
+- Severity: Low
 - Files: `app/engine/pakt/service.py`
 
-Callbacks are wired by mutating `_on_*` attributes after construction rather than injecting at
-`__init__` time. Safe because the BLE thread is idle until the first `scan()` call, but fragile
-if construction order or lifecycle ever changes. Deferred to a future refactor.
+Callbacks are still assigned by mutating `_on_*` attributes after `PaktService` construction rather
+than being injected once at construction time. This is safe today because the BLE loop is idle until
+the first operation, but it remains lifecycle-fragile.
 
-### RES-004 — BUG-005: `_make_tx_snapshot()` returns `None` for PAKT
+### RES-004 — `_make_tx_snapshot()` still returns `None` for PAKT by design
 
-- Severity: Low (no crash path today)
+- Severity: Low
 - Files: `app/app.py`
 
-Intentional: PAKT TX does not use the audio/APRS snapshot path. Not triggered today because no
-RX packets route through `_handle_packet` in PAKT mode. Documents the gap for future PAKT RX work.
+This is still intentional and not a live bug today because PAKT TX does not use the APRS audio
+snapshot path. Keep it in view if future work adds PAKT RX or shared packet-handling paths.
 
-### RES-005 — BUG-007: PAKT telemetry panel (partially addressed)
+### RES-005 — PAKT telemetry still lacks a dedicated structured panel
 
 - Severity: Low
 - Files: `app/ui/main_tab.py`, `app/app.py`
 
-The second integrity pass (SIP-005) improved the log format and prevents rapid-fire telemetry
-from thrashing the PAKT status panel. However, there is still no dedicated structured telemetry
-panel — all telemetry surfaces only in the radio log. A dedicated panel (e.g. a BoundedLog
-in the PAKT BLE frame) would require layout changes and is deferred until firmware/hardware
-behavior is confirmed.
+Telemetry log formatting and status-thrashing behavior were improved, but all telemetry still lands
+in the general radio log. A dedicated telemetry panel is still deferred until runtime behavior is
+confirmed on hardware.
 
-### RES-006 — BUG-008: `chunker.py` uses `assert` for defensive checks
+### RES-006 — `chunker.py` still uses `assert` for defensive validation
 
 - Severity: Low
 - Files: `app/engine/pakt/chunker.py`
 
-`assert` statements are stripped under `-O` (optimized). Not load-bearing in production mode.
-Low priority; can be hardened with explicit `ValueError` raises if chunking errors ever surface.
+The current assertions are not load-bearing in normal runs, but they disappear under `python -O`.
+This remains low priority unless chunking errors begin surfacing in production.
 
-### ~~RES-007~~ — PAKT pending-message timeout: FIXED (SIP-001)
+## Open Script Findings
 
-Fixed in the second integrity pass. `expire_stale_pakt_tx(120.0)` runs every 30 s. Pending
-PAKT outbound messages older than 2 minutes are marked failed and the Comms thread is refreshed.
+### SCR-001 — bootstrap_third_party.py fallback and validation behavior still needs hardening
 
-## Not-Fixed Script Bugs (from `audit.md`)
+- Severity: Medium
+- Files: `scripts/bootstrap_third_party.py`
 
-The pre-existing `audit.md` at the repo root documents 32 issues across 8 scripts (SA818
-diagnostic and utility scripts). None are app startup paths.
+Open script-level issues still present from the earlier script audit:
+- fallback resource lookup is still packaging-layout-sensitive
+- clone failures can still degrade into mixed dependency state
+- offline mode still needs explicit validation that fallback sources exist
+- bundled SA818 package inputs are not deeply validated before install
 
-Fixed in the second integrity pass:
-- `two_radio_diagnostic.py`: added validation for `--extra-record-sec`, `--serial-loops`, and
-  `--aprs-loops` (all must be positive).
+### SCR-002 — two_radio_diagnostic.py still lacks device validation and tighter playback/record teardown
 
-Still deferred:
-- `capture_wav_worker.py` / `rx_score_worker.py`: zero/negative seconds gap (out of scope,
-  no app startup path).
-- Other medium/low script issues from `audit.md`.
+- Severity: Medium
+- Files: `scripts/two_radio_diagnostic.py`
 
-## Summary
+The positive-value CLI validation issue is fixed, but the script still has open robustness gaps:
+- output device indices are not pre-validated before `sd.play()`
+- cleanup semantics still rely on broad exception-safe teardown rather than explicit connection state
+- record/playback coordination is still timing-dependent in error paths
 
-All three code-level bugs found in the first app audit pass are fixed. The second integrity pass
-(2026-03-16) added six additional targeted fixes: PAKT TX timeout, audio device list in PAKT
-mode, PAKT button state reset, telemetry log format improvements, `sv_ttk` optional-dep guard,
-and script argument validation. Compile and `--help` smoke remain green.
+### SCR-003 — mesh_sim_tests.py still relies on globals and internal structures
+
+- Severity: Medium
+- Files: `scripts/mesh_sim_tests.py`
+
+Remaining issues:
+- unused import
+- module-level mutable test state
+- synthetic fixed timestamp base
+- assertions against `_reassembly` internals instead of a public contract
+
+### SCR-004 — play_wav_worker.py still lacks unsigned WAV and device hardening
+
+- Severity: Medium
+- Files: `scripts/play_wav_worker.py`
+
+Remaining issues:
+- uint8/unsigned WAV handling is incomplete
+- peak normalization still assumes signed ranges
+- output device indices are not pre-validated
+
+### SCR-005 — capture_wav_worker.py still accepts invalid recording durations
+
+- Severity: High
+- Files: `scripts/capture_wav_worker.py`
+
+`args.seconds` is still used directly in `int(args.seconds * args.sample_rate)` with no positive-value
+validation, and the input device is still not explicitly validated before recording.
+
+### SCR-006 — rx_score_worker.py still accepts invalid durations and does not classify empty capture cleanly
+
+- Severity: High
+- Files: `scripts/rx_score_worker.py`
+
+`args.seconds` is still used directly for capture length with no positive-value validation. The worker
+also still has no explicit "no audio captured" classification, so zero-frame or effectively empty
+captures collapse into generic error handling.
+
+### SCR-007 — tx_wav_worker.py cleanup semantics still need tightening
+
+- Severity: Medium
+- Files: `scripts/tx_wav_worker.py`
+
+Remaining issues:
+- PTT cleanup still relies on broad finally behavior rather than explicit connection-state handling
+- playback exception handling should more directly guarantee teardown ordering
+
+## Recommended Next Order
+
+1. Do real-device validation on Raspberry Pi and macOS now that the preflight blockers are addressed.
+2. Validate PAKT BLE behavior on hardware for RES-001 and RES-002.
+3. Fix SCR-005 and SCR-006 next because they are still the highest-severity remaining script issues.
+4. If packaging starts next, run the documented macOS/Linux/RPi exit checks against real builds.

@@ -49,9 +49,18 @@ def scrollable_frame(parent: ttk.Frame) -> tuple[tk.Canvas, ttk.Scrollbar, ttk.F
         if delta:
             canvas.yview_scroll(delta, "units")
 
+    def _on_mousewheel_linux_up(e: tk.Event) -> None:
+        canvas.yview_scroll(-1, "units")
+
+    def _on_mousewheel_linux_down(e: tk.Event) -> None:
+        canvas.yview_scroll(1, "units")
+
     inner.bind("<Configure>", _on_inner_config)
     canvas.bind("<Configure>", _on_canvas_config)
+    # Windows / macOS use <MouseWheel> with e.delta; Linux uses Button-4/5.
     canvas.bind("<MouseWheel>", _on_mousewheel)
+    canvas.bind("<Button-4>",   _on_mousewheel_linux_up)
+    canvas.bind("<Button-5>",   _on_mousewheel_linux_down)
     return canvas, vsb, inner
 
 
@@ -208,6 +217,8 @@ class AprsMapCanvas(tk.Canvas):
         self.bind("<B1-Motion>", self._on_drag)
         self.bind("<ButtonRelease-1>", self._on_release)
         self.bind("<MouseWheel>", self._on_wheel)
+        self.bind("<Button-4>", self._on_wheel)
+        self.bind("<Button-5>", self._on_wheel)
 
     def set_on_pick(self, cb) -> None:
         self._on_pick = cb
@@ -314,7 +325,8 @@ class AprsMapCanvas(tk.Canvas):
         h = max(10, self.winfo_height() or 300)
         px, py = float(event.x), float(event.y)
         lat0, lon0 = self._xy_to_latlon(px, py, w, h)
-        factor = 1.15 if event.delta > 0 else (1.0 / 1.15)
+        wheel_up = getattr(event, "num", None) == 4 or getattr(event, "delta", 0) > 0
+        factor = 1.15 if wheel_up else (1.0 / 1.15)
         self._zoom = max(1.0, min(8.0, self._zoom * factor))
         nx, ny = self._latlon_to_xy(lat0, lon0, w, h)
         self._pan_x += nx - px
@@ -359,6 +371,8 @@ class TiledMapCanvas(tk.Canvas):
         self.bind("<B1-Motion>", self._on_drag)
         self.bind("<ButtonRelease-1>", self._on_release)
         self.bind("<MouseWheel>", self._on_wheel)
+        self.bind("<Button-4>", self._on_wheel)
+        self.bind("<Button-5>", self._on_wheel)
 
     # ------------------------------------------------------------------
     # Public API (same as AprsMapCanvas)
@@ -564,7 +578,8 @@ class TiledMapCanvas(tk.Canvas):
         mx, my = float(event.x), float(event.y)
         lat_at_mouse, lon_at_mouse = self._canvas_to_latlon(mx, my)
 
-        new_z = min(self.ZOOM_MAX, self._zoom + 1) if event.delta > 0 \
+        wheel_up = getattr(event, "num", None) == 4 or getattr(event, "delta", 0) > 0
+        new_z = min(self.ZOOM_MAX, self._zoom + 1) if wheel_up \
             else max(self.ZOOM_MIN, self._zoom - 1)
         if new_z == self._zoom:
             return

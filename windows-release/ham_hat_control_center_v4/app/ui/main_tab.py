@@ -32,6 +32,7 @@ class MainTab(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
+        cfg = self._state.display_cfg
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)  # scrollable params fills available space
 
@@ -41,17 +42,21 @@ class MainTab(ttk.Frame):
         _, _, top = scrollable_frame(params_host)
         self._build_params(top)
 
-        # Log panel at bottom (natural height, no weight)
+        # Log panel at bottom — height from DisplayConfig so RPi gets a
+        # shorter log (fewer lines) that fits within the 720px vertical budget.
+        pad = cfg.compact_padding
         lf = ttk.LabelFrame(self, text="Radio Log", padding=4)
-        lf.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        lf.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, pad))
         lf.columnconfigure(0, weight=1)
         lf.rowconfigure(0, weight=1)
-        self._log = BoundedLog(lf, height=8, wrap="word",
-                                font=("Consolas", 8), state="disabled",
+        self._log = BoundedLog(lf, height=cfg.log_height_main, wrap="word",
+                                font=(cfg.mono_font, 8), state="disabled",
                                 background="#0f2531", foreground="#9cc4dd")
         self._log.grid(row=0, column=0, sticky="nsew")
 
     def _build_params(self, parent: ttk.Frame) -> None:
+        cfg = self._state.display_cfg
+        _sp = cfg.compact_padding  # section vertical gap (4 desktop, 2 RPi)
         parent.columnconfigure(0, weight=1)
         parent.columnconfigure(1, weight=1)
         parent.columnconfigure(2, weight=1)
@@ -130,7 +135,7 @@ class MainTab(ttk.Frame):
 
         # --- Radio params ---
         self._radio_frame = ttk.LabelFrame(parent, text="Radio Parameters (SA818)", padding=8)
-        self._radio_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        self._radio_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(_sp, 0))
         self._radio_frame.columnconfigure(1, weight=1)
         add_row(self._radio_frame, "Frequency (MHz)", ttk.Entry(self._radio_frame, textvariable=self._state.frequency_var, width=14), 0)
         add_row(self._radio_frame, "Offset (MHz)", ttk.Entry(self._radio_frame, textvariable=self._state.offset_var, width=14), 1)
@@ -146,11 +151,11 @@ class MainTab(ttk.Frame):
             text="DigiRig mode: program your radio manually.\nAPRS TX/RX audio routes through the DigiRig USB audio device.",
             justify="left", wraplength=300,
         )
-        self._digirig_hint.grid(row=1, column=0, columnspan=2, sticky="nw", padx=8, pady=(8, 0))
+        self._digirig_hint.grid(row=1, column=0, columnspan=2, sticky="nw", padx=8, pady=(_sp, 0))
         self._digirig_only_widgets.append(self._digirig_hint)
 
         self._pakt_frame = ttk.LabelFrame(parent, text="PAKT BLE", padding=8)
-        self._pakt_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        self._pakt_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(_sp, 0))
         self._pakt_frame.columnconfigure(1, weight=1)
         add_row(
             self._pakt_frame,
@@ -207,7 +212,7 @@ class MainTab(ttk.Frame):
 
         # --- Audio routing ---
         audio = ttk.LabelFrame(parent, text="Audio Routing + Auto Detection", padding=8)
-        audio.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=(8, 0), pady=(8, 0))
+        audio.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=(_sp * 2, 0), pady=(_sp, 0))
         audio.columnconfigure(1, weight=1)
         self.out_combo = ttk.Combobox(audio, textvariable=self._state.audio_out_var, width=34, state="readonly")
         add_row(audio, "Audio Output", self.out_combo, 0)
@@ -230,7 +235,7 @@ class MainTab(ttk.Frame):
 
         # --- PTT ---
         ptt = ttk.LabelFrame(parent, text="PTT", padding=8)
-        ptt.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(8, 0))
+        ptt.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(_sp, 0))
         ptt.columnconfigure(1, weight=1)
         ttk.Checkbutton(ptt, text="Key PTT during TX audio", variable=self._state.ptt_enabled_var).grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 2))

@@ -1,0 +1,93 @@
+name: Smoke Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke:
+    name: smoke (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows — primary release target
+          - os: windows-latest
+            python-version: "3.11"
+          # macOS — secondary release target (Apple Silicon runner)
+          - os: macos-latest
+            python-version: "3.11"
+          # Linux — desktop + Raspberry Pi proxy
+          - os: ubuntu-latest
+            python-version: "3.11"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # tkinter is not bundled with the GitHub-hosted ubuntu runner Python;
+      # install it via the system package manager before the pip step.
+      # Also install Xvfb so tkinter can initialise without a real display.
+      - name: Install system deps (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y python3-tk xvfb
+
+      # Install core runtime deps.  pycaw is Windows-only; exclude it on
+      # other platforms.  bleak, scipy, Pillow, sv-ttk are optional but
+      # installing them exercises the "present" paths in the guards.
+      - name: Install Python deps (Windows)
+        if: runner.os == 'Windows'
+        working-directory: windows-release/ham_hat_control_center_v4
+        run: pip install pyserial numpy sounddevice bleak scipy Pillow requests sv-ttk pycaw
+
+      - name: Install Python deps (non-Windows)
+        if: runner.os != 'Windows'
+        working-directory: windows-release/ham_hat_control_center_v4
+        run: pip install pyserial numpy sounddevice bleak scipy Pillow requests sv-ttk
+
+      # Start Xvfb before any step that may create a Tk window (Ubuntu only).
+      - name: Start Xvfb (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          Xvfb :99 -screen 0 1280x720x24 &
+          sleep 1
+
+      # compileall — catches syntax errors and import-time crashes
+      - name: compileall
+        working-directory: windows-release/ham_hat_control_center_v4
+        run: python -m compileall -q app/
+
+      # --help — verifies the entry point parses arguments without error
+      - name: --help
+        working-directory: windows-release/ham_hat_control_center_v4
+        run: python main.py --help
+
+      # smoke_test.py — 11 portability checks
+      - name: smoke_test
+        working-directory: windows-release/ham_hat_control_center_v4
+        run: python scripts/smoke_test.py -v
+        env:
+          # Provide the virtual display to tkinter on Linux.
+          DISPLAY: ":99"
+
+      # Exercise the optional-dependency guard paths with a clean virtualenv
+      # that installs only the hard runtime requirements.
+      - name: guard-only smoke (non-Windows)
+        if: runner.os != 'Windows'
+        working-directory: windows-release/ham_hat_control_center_v4
+        run: |
+          python -m venv .venv-guards
+          . .venv-guards/bin/activate
+          pip install pyserial numpy sounddevice
+          python scripts/smoke_test.py -v --guards-only
+        env:
+          DISPLAY: ":99"

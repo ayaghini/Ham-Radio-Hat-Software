@@ -32,6 +32,7 @@ except ImportError:
     _sv_ttk = None  # type: ignore[assignment]
 
 from .app_state import AppState
+from .engine.display_config import DisplayConfig
 from .engine.aprs_engine import AprsEngine, _TxSnapshot
 from .engine.aprs_modem import (
     build_aprs_message_payload,
@@ -152,18 +153,35 @@ class HamHatApp(tk.Tk):
     VIS_MS  = 120           # level visualiser update interval
     AUTOSAVE_MS = 30_000    # profile auto-save interval
 
-    def __init__(self, app_dir: Path) -> None:
+    def __init__(self, app_dir: Path, display_cfg: Optional["DisplayConfig"] = None) -> None:
         super().__init__()
         self.state = AppState(app_dir)
         self._app_dir = app_dir
+        self._user_data_dir = self.state.user_data_dir
+        self._audio_dir = self.state.audio_dir
+        self._display_cfg = display_cfg or DisplayConfig.default()
 
         self._version = _read_version()
         self.title(f"HAM HAT Control Center  ({self._version})")
-        self.minsize(860, 600)
+
+        # Minimum window size.  On a 1280×720 RPi display the window is fixed
+        # to that resolution, so clamp the minimum to avoid the window manager
+        # enforcing a size larger than the screen.
+        if self._display_cfg.geometry and "1280x720" in self._display_cfg.geometry:
+            self.minsize(640, 480)
+        else:
+            self.minsize(860, 600)
 
         # Set the theme (sv_ttk is optional; falls back to default ttk theme)
         if _sv_ttk is not None:
             _sv_ttk.set_theme("dark")
+
+        # Apply display configuration (scaling, geometry, fonts).
+        # Must happen after sv_ttk theme is applied so Style overrides take effect.
+        self._display_cfg.apply_to_root(self)
+
+        # On Linux/RPi, warn if the user is not in required OS groups.
+        self.after(500, self._check_linux_permissions)
 
         # Pass references from state to self for convenience
         self.radio = self.state.radio
@@ -259,10 +277,23 @@ class HamHatApp(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # --- Status bar startup ---
-        self._set_status("Ready. Select COM port and click Connect.")
+        self._set_status("Ready. Select serial port and click Connect.")
 
         # --- Auto-find audio and auto-connect ---
         self.after(200, self._startup_auto_tasks)
+
+    # -----------------------------------------------------------------------
+    # Display configuration (public — read by tab widgets)
+    # -----------------------------------------------------------------------
+
+    @property
+    def display_cfg(self) -> "DisplayConfig":
+        """Return the active DisplayConfig for this session.
+
+        Tab widgets read this to get platform-appropriate heights, font names,
+        and padding values instead of hardcoding desktop-sized defaults.
+        """
+        return self._display_cfg
 
     # -----------------------------------------------------------------------
     # UI construction
@@ -310,6 +341,81 @@ class HamHatApp(tk.Tk):
         self._tx_lbl.grid(row=0, column=3, sticky="e", padx=(0, 6))
 
     # -----------------------------------------------------------------------
+    # Linux / RPi permission checks
+    # -----------------------------------------------------------------------
+
+    def _check_linux_permissions(self) -> None:
+        """On Linux/RPi, warn if the user is missing required OS group memberships.
+
+        Called 500 ms after startup (via after()) so the window is visible first.
+
+        Common groups checked:
+          - dialout : usually needed for serial port access (SA818, DigiRig)
+          - bluetooth : often needed for BLE access (PAKT), though some
+            systems allow BLE via polkit rules or root instead
+
+        On non-Linux platforms this is a no-op.
+        """
+        import platform as _plat
+        if _plat.system().lower() != "linux":
+            return
+
+        import grp
+        try:
+            username = os.environ.get("USER") or os.environ.get("LOGNAME") or ""
+            if not username:
+                import pwd
+                username = pwd.getpwuid(os.getuid()).pw_name
+        except Exception:
+            return
+
+        missing: list[str] = []
+        for group_name in ("dialout", "bluetooth"):
+            try:
+                members = grp.getgrnam(group_name).gr_mem
+                # Also check if user's primary group IS dialout/bluetooth
+                gid = grp.getgrnam(group_name).gr_gid
+                try:
+                    import pwd
+                    primary_gid = pwd.getpwnam(username).pw_gid
+                except Exception:
+                    primary_gid = -1
+                if username not in members and primary_gid != gid:
+                    missing.append(group_name)
+            except KeyError:
+                # Group doesn't exist on this system — skip
+                pass
+            except Exception:
+                pass
+
+        if missing:
+            lines = [
+                "Your user is missing one or more common Linux hardware-access groups:\n"
+            ]
+            serial_blocked = False
+            for g in missing:
+                if g == "dialout":
+                    serial_blocked = True
+                    lines.append(f"  • dialout — needed for serial port (SA818, DigiRig)")
+                    lines.append(f"    Fix: sudo usermod -aG dialout $USER")
+                elif g == "bluetooth":
+                    lines.append(f"  • bluetooth — commonly needed for BLE (PAKT TNC)")
+                    lines.append(f"    Fix: sudo usermod -aG bluetooth $USER")
+            lines.append("")
+            if "bluetooth" in missing:
+                lines.append("Note: BLE may still work on some systems via polkit or root access.")
+            lines.append("You must log out and back in for group changes to take effect.")
+            if serial_blocked:
+                lines.append("Serial hardware will not work until dialout access is fixed.")
+            else:
+                lines.append("Hardware access may fail until group or equivalent OS permissions are configured.")
+            messagebox.showwarning(
+                "Linux Permission Warning",
+                "\n".join(lines),
+                parent=self,
+            )
+
+    # -----------------------------------------------------------------------
     # Callback wiring
     # -----------------------------------------------------------------------
 
@@ -330,7 +436,7 @@ class HamHatApp(tk.Tk):
         self.aprs.on_waterfall(lambda mono, rate: _post(_WaterfallEvt(mono, rate)))
         self.aprs.on_rx_clip(lambda pct: _post(_RxClipEvt(pct)))
 
-        self.pakt.set_config_cache_path(self._app_dir / "profiles" / "pakt_config_cache.json")
+        self.pakt.set_config_cache_path(self._user_data_dir / "profiles" / "pakt_config_cache.json")
         self.pakt._on_scan_results = lambda items: _post(_PaktScanEvt(items))
         self.pakt._on_connection = lambda event: _post(_PaktConnEvt(event))
         self.pakt._on_status = lambda event: _post(_PaktSysStatusEvt(event.text))
@@ -635,7 +741,16 @@ class HamHatApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def scan_ports(self) -> list[str]:
-        """Return list of available serial port names (called on main thread)."""
+        """Return list of available serial port names (called on main thread).
+
+        Port name format differs by platform (CP-100):
+          Windows     : "COM3", "COM8", …
+          macOS       : "/dev/cu.usbserial-…", "/dev/tty.usbserial-…"
+          Linux / RPi : "/dev/ttyUSB0", "/dev/ttyACM0", …
+
+        On Linux/RPi the user must be in the 'dialout' group (or equivalent)
+        to open serial ports: `sudo usermod -aG dialout $USER` then re-login.
+        """
         try:
             import serial.tools.list_ports
             return [p.device for p in serial.tools.list_ports.comports()]
@@ -691,7 +806,12 @@ class HamHatApp(tk.Tk):
                     self._evq.put_nowait(_StatusEvt("DigiRig auto-identify: no non-SA818 port found. Is DigiRig connected?"))
                     return
 
-                # Prefer CP210x / Silicon Labs ports (DigiRig uses CP2102)
+                # Prefer CP210x / Silicon Labs ports (DigiRig uses CP2102).
+                # Description string format differs by platform (CP-100):
+                #   Windows : "Silicon Labs CP210x USB to UART Bridge (COMn)"
+                #   macOS   : "CP2102 USB to UART Bridge Controller"
+                #   Linux   : "CP210x UART Bridge" or "CP2102 USB to UART Bridge"
+                # The keywords "cp210" and "silicon labs" match across all platforms.
                 cp210x_candidates = [
                     (dev, desc) for dev, desc in non_sa818_ports
                     if "cp210" in desc.lower() or "silicon labs" in desc.lower()

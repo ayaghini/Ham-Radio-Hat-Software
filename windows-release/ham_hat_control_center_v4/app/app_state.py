@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import queue
+import shutil
 import tkinter as tk
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from .engine.audio_router import AudioRouter
 from .engine.comms_mgr import CommsManager
 from .engine.mesh_mgr import MeshManager
 from .engine.pakt import PaktService
+from .engine.platform_paths import get_user_data_dir
 from .engine.profile import ProfileManager
 from .engine.radio_ctrl import RadioController
 from .engine.tile_provider import TileProvider
@@ -22,13 +24,38 @@ class AppState:
 
     def __init__(self, app_dir: Path) -> None:
         self.app_dir = app_dir
-        self.audio_dir = app_dir / "audio_out"
-        self.profile_path = app_dir / "profiles" / "last_profile.json"
+
+        # Use cross-platform user data directory for mutable files (profiles,
+        # audio output) so that the app works correctly when installed outside
+        # the source tree (e.g. a signed macOS .app bundle or a Linux system
+        # install where the source directory is read-only).
+        #
+        # Falls back to app_dir-relative paths when the platform helper returns
+        # the fallback, which preserves the existing behaviour for local dev
+        # runs where app_dir is writable.
+        _user_data = get_user_data_dir("HamHatCC", fallback_dir=app_dir)
+        self.user_data_dir = _user_data
+
+        self.audio_dir = _user_data / "audio_out"
+        self.profile_path = _user_data / "profiles" / "last_profile.json"
         self.audio_dir.mkdir(parents=True, exist_ok=True)
+        self.profile_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Upgrade-safe profile migration: if the new user-data location has no
+        # profile yet but a legacy in-tree profile exists, copy it forward.
+        legacy_profile_path = app_dir / "profiles" / "last_profile.json"
+        if self.profile_path != legacy_profile_path:
+            if not self.profile_path.exists() and legacy_profile_path.exists():
+                try:
+                    shutil.copy2(legacy_profile_path, self.profile_path)
+                except Exception:
+                    # Best-effort migration only; ProfileManager will still
+                    # fall back cleanly if the copy or the legacy file is bad.
+                    pass
 
         # --- Engine components ---
         self.radio = RadioController()
-        self.audio = AudioRouter(app_dir)
+        self.audio = AudioRouter(app_dir, audio_dir=self.audio_dir)
         self.aprs = AprsEngine(self.radio, self.audio, self.audio_dir)
         self.comms = CommsManager()
         self.pakt = PaktService()
