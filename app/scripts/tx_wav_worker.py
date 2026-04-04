@@ -51,6 +51,56 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _load_wav_float32(wav_path: Path) -> tuple["np.ndarray", int]:  # type: ignore[name-defined]
+    """Load WAV → float32 in [-1, 1].
+
+    Supported sample widths:
+      1 byte  — 8-bit unsigned (WAV standard; bias-subtract before normalise)
+      2 bytes — 16-bit signed int16
+      3 bytes — 24-bit signed PCM (sign-extended to int32 before normalise)
+      4 bytes — 32-bit signed int32
+    Raises ValueError for any other sample width.
+    """
+    import numpy as np
+
+    with wave.open(str(wav_path), "rb") as wf:
+        rate      = wf.getframerate()
+        channels  = wf.getnchannels()
+        sampwidth = wf.getsampwidth()
+        frames    = wf.readframes(wf.getnframes())
+
+    if sampwidth == 1:
+        # 8-bit WAV is unsigned (range 0–255, centre at 128).
+        raw = np.frombuffer(frames, dtype=np.uint8)
+        data_f = (raw.astype(np.float32) - 128.0) / 128.0
+    elif sampwidth == 2:
+        raw = np.frombuffer(frames, dtype=np.int16)
+        data_f = raw.astype(np.float32) / float(np.iinfo(np.int16).max)
+    elif sampwidth == 3:
+        # 24-bit PCM: 3 bytes per sample, little-endian signed.
+        # NumPy has no native 3-byte dtype; sign-extend each sample to int32 manually.
+        raw3 = np.frombuffer(frames, dtype=np.uint8).reshape(-1, 3)
+        n = len(raw3)
+        padded = np.empty((n, 4), dtype=np.uint8)
+        padded[:, :3] = raw3
+        # Sign-extend: if the MSB of the 3-byte sample has bit 7 set, fill with 0xFF.
+        padded[:, 3] = np.where(raw3[:, 2] >= 0x80, np.uint8(0xFF), np.uint8(0x00))
+        ints = padded.view(np.int32).reshape(-1)
+        data_f = ints.astype(np.float32) / float(np.iinfo(np.int32).max >> 8)  # 2^23 - 1
+    elif sampwidth == 4:
+        raw = np.frombuffer(frames, dtype=np.int32)
+        data_f = raw.astype(np.float32) / float(np.iinfo(np.int32).max)
+    else:
+        raise ValueError(
+            f"unsupported WAV sample width {sampwidth} bytes "
+            f"({sampwidth * 8}-bit PCM) in {wav_path.name!r}"
+        )
+
+    if channels > 1:
+        data_f = data_f.reshape(-1, channels)
+    return data_f, rate
+
+
 def main() -> int:
     _setup_path()
     args = parse_args()
@@ -64,11 +114,13 @@ def main() -> int:
     from app.engine.models import RadioConfig
 
     import sounddevice as sd
-    import numpy as np
 
+    _connected = False
     client = SA818Client()
     try:
         client.connect(args.port, timeout=1.5)
+        _connected = True
+
         cfg = RadioConfig(
             frequency=float(args.frequency),
             offset=0.0,
@@ -83,27 +135,15 @@ def main() -> int:
             except Exception:
                 pass
 
-        # Load WAV
-        with wave.open(str(wav_path), "rb") as wf:
-            rate      = wf.getframerate()
-            channels  = wf.getnchannels()
-            sampwidth = wf.getsampwidth()
-            frames    = wf.readframes(wf.getnframes())
+        data_f, rate = _load_wav_float32(wav_path)
 
-        dtype_map = {1: np.int8, 2: np.int16, 4: np.int32}
-        dtype = dtype_map.get(sampwidth, np.int16)
-        data = np.frombuffer(frames, dtype=dtype)
-        if channels > 1:
-            data = data.reshape(-1, channels)
-        peak = float(np.iinfo(dtype).max)
-        data_f = data.astype(np.float32) / peak
-
-        # PTT → pre-delay → play → post-delay → release
+        # PTT → pre-delay → play → post-delay → release PTT
         client.set_ptt(True, line=args.ptt_line, active_high=args.ptt_active_high)
         time.sleep(max(0.0, args.ptt_pre_ms / 1000.0))
         try:
             sd.play(data_f, samplerate=rate, device=int(args.output_device), blocking=True)
         finally:
+            # Primary PTT release: always runs whether play succeeded or not.
             time.sleep(max(0.0, args.ptt_post_ms / 1000.0))
             client.set_ptt(False, line=args.ptt_line, active_high=args.ptt_active_high)
 
@@ -116,11 +156,18 @@ def main() -> int:
         print(f"[tx_wav_worker] Error: {exc}", file=sys.stderr)
         return 1
     finally:
+        # Safety-net PTT release: guards against exceptions raised before set_ptt(True)
+        # was reached or before the inner finally ran.  Harmless if PTT is already low.
+        if _connected:
+            try:
+                client.set_ptt(False, line=args.ptt_line, active_high=args.ptt_active_high)
+            except Exception:
+                pass
+        # Disconnect is always attempted but never allowed to mask the real exit code.
         try:
-            client.set_ptt(False, line=args.ptt_line, active_high=args.ptt_active_high)
+            client.disconnect()
         except Exception:
             pass
-        client.disconnect()
 
 
 if __name__ == "__main__":

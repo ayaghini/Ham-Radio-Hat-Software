@@ -7,8 +7,8 @@ Last updated: 2026-03-09
 ## 1. Purpose
 
 Define required functional behavior for the current HAM HAT software packages:
-- Windows package: `windows-release/ham_hat_control_center_v4`
-- Raspberry Pi package: `pi-release/ham_hat_control_center`
+- Windows package: `app`
+- Raspberry Pi package: `archive/pi-legacy`
 
 This document reflects implemented behavior as of 2026-03-09.
 

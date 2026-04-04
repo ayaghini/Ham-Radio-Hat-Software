@@ -4,7 +4,7 @@
 
 Copy this folder to Raspberry Pi:
 
-- `pi-release/ham_hat_control_center`
+- `archive/pi-legacy`
 
 ## 2. Install system packages
 

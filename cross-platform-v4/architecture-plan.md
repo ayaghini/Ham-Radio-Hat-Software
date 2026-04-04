@@ -7,7 +7,7 @@ The current v4 app is a desktop-first Tkinter application with mixed responsibil
 - UI orchestration in `app/app.py`
 - hardware and APRS logic in `app/engine/`
 - transport-specific details embedded in engine modules
-- release structure centered on `windows-release/`
+- release structure now centered on `app/`, with historical snapshots preserved under `archive/`
 
 This is workable for migration, but only if OS-sensitive details are isolated instead of spreading further.
 

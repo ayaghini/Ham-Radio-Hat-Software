@@ -1,7 +1,7 @@
 ﻿# APRS AX.25 Mesh (Test) - Full Agent Implementation Spec
 
 Last updated: 2026-03-09
-Target app: `windows-release/ham_hat_control_center_v4`
+Target app: `app`
 Status: Execution-ready specification for agent implementation
 
 ## 1) Objective

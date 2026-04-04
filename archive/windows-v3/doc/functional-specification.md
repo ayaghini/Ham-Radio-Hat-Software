@@ -8,7 +8,7 @@ Last updated: 2026-02-25
 
 Define the required functional behavior of the uConsole HAM HAT Control Center software packages:
 - Windows package: `windows-release/ham_hat_control_center`
-- Raspberry Pi package: `pi-release/ham_hat_control_center`
+- Raspberry Pi package: `archive/pi-legacy`
 
 This document reflects implemented behavior as of the date above.
 

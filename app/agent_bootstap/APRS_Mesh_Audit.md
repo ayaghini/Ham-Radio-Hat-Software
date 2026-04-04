@@ -1,7 +1,7 @@
 ﻿# APRS Mesh Audit
 
 Date: 2026-03-09
-Scope: Re-audit after mesh fixes under `windows-release/ham_hat_control_center_v4`
+Scope: Re-audit after mesh fixes under `app`
 Audited areas:
 - `app/engine/mesh_mgr.py`
 - `app/ui/mesh_tab.py`
@@ -12,13 +12,13 @@ Audited areas:
 
 Commands executed:
 
-1. `python -m compileall -q windows-release/ham_hat_control_center_v4/app windows-release/ham_hat_control_center_v4/scripts/mesh_sim_tests.py`
+1. `python -m compileall -q app/app app/scripts/mesh_sim_tests.py`
 - Result: PASS
 
-2. `python windows-release/ham_hat_control_center_v4/scripts/mesh_sim_tests.py`
+2. `python app/scripts/mesh_sim_tests.py`
 - Result: PASS (`54 passed, 0 failed`)
 
-3. `python windows-release/ham_hat_control_center_v4/main.py --help`
+3. `python app/main.py --help`
 - Result: PASS
 
 ## Fix Verification Summary

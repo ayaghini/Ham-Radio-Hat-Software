@@ -1,10 +1,22 @@
 ﻿# Quick Start (Raspberry Pi)
 
+Legacy note:
+- This quick start is for the old Pi-only package.
+- The active Raspberry Pi app path is now `app`.
+- Prefer the active `v4` app for current validation and implementation work.
+
+## Preferred current path
+
+```bash
+cd ../app
+python3 main.py --rpi
+```
+
 ## 1. Copy folder to Pi
 
 Copy this folder to Raspberry Pi:
 
-- `pi-release/ham_hat_control_center`
+- `archive/pi-legacy`
 
 ## 2. Install system packages
 

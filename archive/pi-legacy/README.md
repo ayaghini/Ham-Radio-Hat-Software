@@ -1,5 +1,10 @@
 ﻿# uConsole HAM HAT Control Center (Raspberry Pi)
 
+Legacy status:
+- This package is a stale Raspberry Pi-specific snapshot.
+- It is no longer the primary app path for current work.
+- The active cross-platform app now lives at `app`, even for Raspberry Pi.
+
 Raspberry Pi package for SA818 bring-up and radio control.
 
 ## Includes
@@ -28,8 +33,17 @@ sudo apt install -y python3 python3-venv python3-tk git
 
 ## Quick Start
 
+Preferred current path for Raspberry Pi work:
+
 ```bash
-cd pi-release/ham_hat_control_center
+cd ../../app
+python3 main.py --rpi
+```
+
+Legacy package quick start:
+
+```bash
+cd archive/pi-legacy
 chmod +x run_pi.sh build_pi.sh
 ./run_pi.sh
 ```

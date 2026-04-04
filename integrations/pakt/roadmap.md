@@ -1,7 +1,7 @@
 # PAKT Integration Roadmap
 
 Status date: 2026-03-16 (updated after whole-app integrity audit pass)
-Scope: `windows-release/ham_hat_control_center_v4` only
+Scope: `app` only
 
 ## Phases
 

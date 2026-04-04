@@ -29,20 +29,24 @@ from app.engine.models import MeshConfig, MeshPacket
 # Test harness
 # ---------------------------------------------------------------------------
 
-_PASS = 0
-_FAIL = 0
-_T0 = time.monotonic()
+class _Counts:
+    """Accumulates pass/fail counts for one test run without module-level mutation."""
+    __slots__ = ("passed", "failed")
+    def __init__(self) -> None:
+        self.passed = 0
+        self.failed = 0
+
+_counts = _Counts()
 
 
 def _result(name: str, ok: bool, detail: str = "") -> None:
-    global _PASS, _FAIL
     status = "PASS" if ok else "FAIL"
     suffix = f" — {detail}" if detail else ""
     print(f"  [{status}] {name}{suffix}")
     if ok:
-        _PASS += 1
+        _counts.passed += 1
     else:
-        _FAIL += 1
+        _counts.failed += 1
 
 
 def _make_mgr(call: str, enabled: bool = True, role: str = "ENDPOINT",
@@ -59,7 +63,7 @@ def _make_mgr(call: str, enabled: bool = True, role: str = "ENDPOINT",
     return m
 
 
-NOW = 1_000_000.0   # stable fake clock baseline
+NOW = 1_000_000.0   # stable fake clock baseline (unrelated to wall time)
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +168,6 @@ def test_3node_data_delivery() -> None:
     c = _make_mgr("VA7C-2")
 
     # Pre-load routes so we can skip discovery in this test
-    import time as _t
     now = NOW + 100
     a._routes["VA7C-2"] = _make_route("VA7C-2", "VA7B-1", 2, now)
     b._routes["VA7C-2"] = _make_route("VA7C-2", "VA7C-2", 1, now)
@@ -221,13 +224,19 @@ def test_chunked_reassembly() -> None:
     _result("body correct", "helloXXworld" in d2[0] if d2 else False,
             repr(d2[0]) if d2 else "no delivery")
 
-    # Timeout path: send only part 1 with a different mid, expire it
+    # Timeout path: send only part 1 with a different mid, then expire it via tick().
+    # After expiry the partial entry is cleared; sending part 2 alone should NOT deliver
+    # (public contract: incomplete reassembly was discarded, not completed).
     mid2 = "CHUNK02"
-    raw3 = (f"{MESH_PREFIX}DATA/ver=1;src=VA7A-9;dst=VA7C-2;mid={mid2};"
-            f"ttl=2;route=*;body=part1only;part=1;total=2")
-    c.handle_rx(raw3, "VA7B-1", now + 1)
-    c._expire_reassembly(now + 200)   # advance well past 60s timeout
-    _result("partial reassembly expired on timeout", mid2 not in [k[1] for k in c._reassembly])
+    raw3_p1 = (f"{MESH_PREFIX}DATA/ver=1;src=VA7A-9;dst=VA7C-2;mid={mid2};"
+               f"ttl=2;route=*;body=part1only;part=1;total=2")
+    raw3_p2 = (f"{MESH_PREFIX}DATA/ver=1;src=VA7A-9;dst=VA7C-2;mid={mid2};"
+               f"ttl=2;route=*;body=part2only;part=2;total=2")
+    c.handle_rx(raw3_p1, "VA7B-1", now + 1)
+    c.tick(now + 200)   # advance well past 60s reassembly timeout
+    _, d_late = c.handle_rx(raw3_p2, "VA7B-1", now + 201)
+    _result("partial reassembly expired on timeout",
+            len(d_late) == 0, f"got {len(d_late)} deliveries (expected 0 — part1 was expired)")
 
 
 # ---------------------------------------------------------------------------
@@ -328,11 +337,28 @@ def test_tick_expires_reassembly() -> None:
     mid = "TICK01"
     raw1 = (f"{MESH_PREFIX}DATA/ver=1;src=VA7A-9;dst=VA7C-2;mid={mid};"
             f"ttl=2;route=*;body=part1;part=1;total=2")
+    raw2 = (f"{MESH_PREFIX}DATA/ver=1;src=VA7A-9;dst=VA7C-2;mid={mid};"
+            f"ttl=2;route=*;body=part2;part=2;total=2")
+
+    # Positive case: tick well before expiry, then part 2 completes the reassembly.
     c.handle_rx(raw1, "VA7B-1", now)
-    _result("reassembly entry exists after part 1", (("VA7A-9", mid) in c._reassembly))
-    # Advance clock past 60s timeout via tick()
-    c.tick(now + 120)
-    _result("reassembly entry removed by tick()", (("VA7A-9", mid) not in c._reassembly))
+    c.tick(now + 30)                            # 30s < 60s timeout — entry still live
+    _, d_before = c.handle_rx(raw2, "VA7B-1", now + 30)
+    _result("part 2 delivers when part 1 still buffered", len(d_before) == 1,
+            f"got {len(d_before)} deliveries (expected 1)")
+
+    # Expiry case: a fresh mid, only part 1 sent, then tick past timeout.
+    # Sending part 2 after expiry should NOT deliver (part 1 is gone).
+    mid2 = "TICK02"
+    raw_a = (f"{MESH_PREFIX}DATA/ver=1;src=VA7A-9;dst=VA7C-2;mid={mid2};"
+             f"ttl=2;route=*;body=part1;part=1;total=2")
+    raw_b = (f"{MESH_PREFIX}DATA/ver=1;src=VA7A-9;dst=VA7C-2;mid={mid2};"
+             f"ttl=2;route=*;body=part2;part=2;total=2")
+    c.handle_rx(raw_a, "VA7B-1", now + 31)
+    c.tick(now + 200)                           # advance well past 60s timeout
+    _, d_after = c.handle_rx(raw_b, "VA7B-1", now + 201)
+    _result("part 2 does not deliver after part 1 expired by tick()",
+            len(d_after) == 0, f"got {len(d_after)} deliveries (expected 0 — part1 expired)")
 
 
 # ---------------------------------------------------------------------------
@@ -394,6 +420,11 @@ def _make_route(dst: str, via: str, hops: int, now: float, expiry_s: int = 600):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    # Reset counters and start timer here, not at import time.
+    _counts.passed = 0
+    _counts.failed = 0
+    t0 = time.monotonic()
+
     print("=" * 60)
     print("Mesh Simulation Tests (MESH-008)")
     print("=" * 60)
@@ -414,7 +445,7 @@ if __name__ == "__main__":
 
     print()
     print("=" * 60)
-    elapsed = time.monotonic() - _T0
-    print(f"Results: {_PASS} passed, {_FAIL} failed  ({elapsed:.2f}s)")
+    elapsed = time.monotonic() - t0
+    print(f"Results: {_counts.passed} passed, {_counts.failed} failed  ({elapsed:.2f}s)")
     print("=" * 60)
-    sys.exit(0 if _FAIL == 0 else 1)
+    sys.exit(0 if _counts.failed == 0 else 1)

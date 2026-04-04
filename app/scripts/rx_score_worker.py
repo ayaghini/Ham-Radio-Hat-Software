@@ -26,6 +26,30 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _validate_capture_args(args: argparse.Namespace) -> str | None:
+    if args.seconds <= 0:
+        return "--seconds must be greater than 0"
+    if args.sample_rate <= 0:
+        return "--sample-rate must be greater than 0"
+    frames = int(args.seconds * args.sample_rate)
+    if frames <= 0:
+        return "capture frame count must be greater than 0"
+    return None
+
+
+def _validate_input_device(sd, device: int | None) -> str | None:
+    if device is None:
+        return None
+    try:
+        info = sd.query_devices(device)
+    except Exception as exc:
+        return f"input device {device} is invalid: {exc}"
+    max_inputs = int(info.get("max_input_channels", 0))
+    if max_inputs <= 0:
+        return f"input device {device} has no input channels"
+    return None
+
+
 def voice_activity_score(samples) -> float:
     """Weighted combination of RMS energy and 95th-percentile amplitude."""
     import numpy as np
@@ -43,10 +67,21 @@ def main() -> int:
     args = parse_args()
 
     device = None if int(args.input_device) < 0 else int(args.input_device)
+    arg_error = _validate_capture_args(args)
+    if arg_error:
+        print(f"[rx_score_worker] Error: {arg_error}", file=sys.stderr)
+        print("0.00000000")
+        return 1
 
     try:
         import sounddevice as sd
         import numpy as np
+
+        device_error = _validate_input_device(sd, device)
+        if device_error:
+            print(f"[rx_score_worker] Error: {device_error}", file=sys.stderr)
+            print("0.00000000")
+            return 1
 
         data = sd.rec(
             frames=int(args.seconds * args.sample_rate),
@@ -57,7 +92,16 @@ def main() -> int:
         )
         sd.wait()
 
+        if data is None or getattr(data, "size", 0) == 0:
+            print("[rx_score_worker] Error: no audio captured", file=sys.stderr)
+            print("0.00000000")
+            return 1
+
         mono = data.reshape(-1).astype(np.float32)
+        if mono.size == 0:
+            print("[rx_score_worker] Error: no audio captured", file=sys.stderr)
+            print("0.00000000")
+            return 1
         score = voice_activity_score(mono)
         print(f"{score:.8f}")
         return 0

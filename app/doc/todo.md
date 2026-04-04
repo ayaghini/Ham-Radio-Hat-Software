@@ -1,7 +1,7 @@
 ﻿# HAM HAT Control Center v4 - QA Findings Backlog
 
 Date reviewed: 2026-03-09
-Version: 4.0 (`windows-release/ham_hat_control_center_v4/VERSION`)
+Version: 4.0 (`app/VERSION`)
 
 This file tracks follow-up work items that are not release blockers.
 Current release verification status is maintained in `doc/QA_VERIFICATION_LOG.md`.

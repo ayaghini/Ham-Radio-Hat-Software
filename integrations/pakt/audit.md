@@ -1,15 +1,15 @@
 # PAKT Integration Audit
 
 Date: 2026-03-16
-Target: `windows-release/ham_hat_control_center_v4`
+Target: `app`
 Scope: PAKT-only review plus review of the existing repo-level `audit.md`
 
 ## Verification Run
 
 Verified locally:
 
-- `python3 -m compileall -q /Users/mac4pro64/Desktop/hamsoftware/Ham-Radio-Hat-Software/windows-release/ham_hat_control_center_v4 /Users/mac4pro64/Desktop/hamsoftware/Ham-Radio-Hat-Software/integrations/pakt`
-- `python3 /Users/mac4pro64/Desktop/hamsoftware/Ham-Radio-Hat-Software/windows-release/ham_hat_control_center_v4/main.py --help`
+- `python3 -m compileall -q /Users/mac4pro64/Desktop/hamsoftware/Ham-Radio-Hat-Software/app /Users/mac4pro64/Desktop/hamsoftware/Ham-Radio-Hat-Software/integrations/pakt`
+- `python3 /Users/mac4pro64/Desktop/hamsoftware/Ham-Radio-Hat-Software/app/main.py --help`
 - PAKT import smoke:
   - `PaktService`
   - `Feature.APRS_2M`
@@ -25,7 +25,7 @@ Reviewed:
 
 Assessment:
 
-- The existing audit file is a script audit for `windows-release/ham_hat_control_center_v4/scripts`.
+- The existing audit file is a script audit for `app/scripts`.
 - It is useful but unrelated to the new PAKT BLE integration work.
 - It does not cover the new `app/engine/pakt/` backend, PAKT UI wiring, or PAKT mode dispatch logic.
 - This file exists to cover that gap.
@@ -45,8 +45,8 @@ The four findings from this audit are now fixed in code:
 
 - Severity: Medium
 - Files:
-  - `/Users/mac4pro64/Desktop/hamsoftware/Ham-Radio-Hat-Software/windows-release/ham_hat_control_center_v4/app/engine/comms_mgr.py`
-  - `/Users/mac4pro64/Desktop/hamsoftware/Ham-Radio-Hat-Software/windows-release/ham_hat_control_center_v4/app/engine/pakt/service.py`
+  - `/Users/mac4pro64/Desktop/hamsoftware/Ham-Radio-Hat-Software/app/engine/comms_mgr.py`
+  - `/Users/mac4pro64/Desktop/hamsoftware/Ham-Radio-Hat-Software/app/engine/pakt/service.py`
 
 What changed:
 

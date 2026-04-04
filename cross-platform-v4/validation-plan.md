@@ -1,148 +1,67 @@
 # Cross-Platform v4 Validation Plan
 
-## Validation Philosophy
+## Baseline Commands
 
-Portability work should be measured at three levels:
+Run from repo root:
 
-1. static integrity
-2. local runtime smoke
-3. platform-specific runtime validation
-
-## Baseline Checks
-
-Run on every substantial pass:
-
-```
-python3 -m compileall -q <v4 root>
-python3 <v4 root>/main.py --help
-python3 <v4 root>/scripts/smoke_test.py
+```bash
+# Note: use -x '\.venv' (not --exclude) when running Python 3.9; Python 3.13
+# packages in .venv use match-statement syntax that 3.9 cannot compile.
+python3 -m compileall -q -x '\.venv' app
+python3 app/main.py --help
+python3 app/scripts/smoke_test.py -v
+python3 app/scripts/smoke_test.py -v --guards-only
+python3 app/scripts/platform_validation.py
 ```
 
-## Baseline Results
+## Confirmed So Far
 
-### Pass 1 (2026-04-01 — macOS Darwin 25.4.0)
+- macOS: compile/import/help/smoke pass recorded; source-run GUI bring-up confirmed
+- macOS item-by-item headless validation (2026-04-03): **25 pass, 0 fail, 6 skip**
+  - profile round-trip: SA818, DigiRig, PAKT all pass
+  - mode switching: all three hardware-mode profiles confirmed
+  - audio enumeration: 3 outputs (LG UltraFine, Mac mini Speakers, WH-1000XM4), 1 input
+  - serial scan: pyserial executes; `/dev/cu.*` naming confirmed; no hardware ports present
+  - BLE transport module loads; TransportState members verified; bleak absent (gracefully guarded — SKIP)
+  - platform paths: `~/Library/Application Support/HamHatCC` (exists), `~/Library/Logs/HamHatCC`
+  - DisplayConfig: default scale=1.0, rpi_720p scale=1.5 compact_padding=2
+  - APRS message payload builder confirmed
+  - BLE permission dialog (live scan): cannot test without bleak installed + hardware present
+- Raspberry Pi: source-run GUI bring-up confirmed with `python3 main.py --rpi`
+- smoke test is safe in sparse environments
+- guard-only optional-dependency validation exists
+- `platform_validation.py` script created; ready to run on Linux desktop and RPi
 
-```
-python3 -m compileall -q windows-release/ham_hat_control_center_v4   → clean (exit 0)
-python3 main.py --help                                                 → green (exit 0)
-```
+## Still Needed
 
-### Pass 2 (2026-04-01 — macOS Darwin 25.4.0, after all Phase 2 changes)
+### Linux Desktop
 
-```
-python3 -m compileall -q windows-release/ham_hat_control_center_v4   → clean (exit 0)
-python3 main.py --help                                                 → green (exit 0)
-python3 scripts/smoke_test.py -v                                       → 11/11 PASS
-```
+- first real GUI launch
+- audio enumeration
+- serial scan
+- profile save/load
+- BLE prerequisites check
+- run `python3 app/scripts/platform_validation.py` for full checklist
 
-Smoke test detail:
-- required imports          PASS
-- AppState import           PASS
-- sv_ttk guard              PASS  (absent, guard OK)
-- bleak guard               PASS  (absent, guard OK)
-- scipy guard               PASS  (absent, numpy fallback OK)
-- pycaw guard               PASS  (absent on darwin, correct)
-- winsound guard            PASS  (absent on darwin, correct)
-- profile round-trip        PASS
-- platform paths            PASS  (data=~/Library/Application Support/HamHatCC)
-- audio device listing      PASS  (2 outputs, 0 inputs — no audio hardware connected)
-- APRS modem                PASS
+### macOS
 
-### Follow-up Audit Note (2026-04-01 — current workspace)
+- BLE permission flow (requires bleak + hardware; all other items confirmed)
 
-```
-python3 -m compileall -q windows-release/ham_hat_control_center_v4/app  → clean (exit 0)
-python3 windows-release/ham_hat_control_center_v4/main.py --help         → green (exit 0)
-python3 windows-release/ham_hat_control_center_v4/scripts/smoke_test.py -v
-  → passes; missing hard runtime deps are now classified as SKIP
-python3 windows-release/ham_hat_control_center_v4/scripts/smoke_test.py -v --guards-only
-  → passes
-```
+### Raspberry Pi
 
-Interpretation:
-- this does not invalidate the earlier macOS pass result
-- `smoke_test.py` is now safe to run in sparse environments
-- CI now has a guard-only smoke step on non-Windows runners
+- wheel zoom
+- serial scan
+- audio enumeration
+- profile persistence
+- BLE prerequisites/path
 
-## Whole-App Smoke Areas
+### Hardware-backed
 
-### Startup
+- PAKT BLE scan/connect/TX result behavior
+- SA818 and DigiRig real-device workflows
 
-- app imports cleanly ✓
-- optional dependency failures are partially validated only; guard code exists, but current smoke coverage does not fully separate missing required runtime deps from missing optional deps
-- theme fallback works if sv_ttk is absent ✓
+### Packaging
 
-### Profiles and State
-
-- default profile loads ✓
-- profile save/load round-trips ✓ (verified in smoke_test.py)
-- upgrade-safe migration from legacy in-tree profiles is now implemented
-- switching hardware mode does not corrupt stored settings ✓ (static audit confirmed)
-
-### Mode Switching
-
-- SA818 to DigiRig: static audit — clean routing
-- DigiRig to PAKT: static audit — clean routing
-- PAKT to SA818: static audit — clean routing
-- stale button state on PAKT round-trip: fixed in SIP-003
-- footer indicator reset on mode change: fixed in AUD-002
-
-### Messaging and Comms
-
-- PAKT pending timeout: fixed in SIP-001 (2 min, 30s tick)
-- TX result reconciliation: fixed in third fix pass
-- No hard crash without hardware: confirmed by --help and import smoke
-
-### Scripts
-
-- `scripts/smoke_test.py`: historical macOS pass recorded; sparse-environment behavior now skips hard-runtime-dependent checks cleanly
-- `scripts/two_radio_diagnostic.py`: argument validation improved in SIP-007; cross-platform ✓
-- `scripts/bootstrap_third_party.py`: cross-platform; --dev help note updated ✓
-- Worker scripts (play/capture/rx_score/tx_wav): sounddevice/numpy based and portable in principle, but several script-level hardening issues remain in the canonical audit
-
-## Platform Validation Checklist
-
-| Check | Windows | macOS | Linux | Raspberry Pi |
-|---|---|---|---|---|
-| compileall | passing (prior) | passing ✓ 2026-04-01 | pending | pending |
-| import smoke | passing (prior) | passing ✓ 2026-04-01 | pending | pending |
-| startup smoke (--help) | passing (prior) | passing ✓ 2026-04-01 | pending | pending |
-| smoke_test.py | n/a | historical pass ✓ 2026-04-01 | pending | pending |
-| GUI startup | passing (prior) | pending | pending | pending |
-| profile round-trip | passing (prior) | passing ✓ (smoke_test) | pending | pending |
-| mode switch smoke | passing (prior) | pending | pending | pending |
-| audio enumeration | passing (prior) | 2 outputs found ✓ | pending | pending |
-| auto USB audio select | passing (prior) | pending (keywords added) | pending | pending |
-| BLE scan | passing (prior) | pending (TCC perm needed) | pending | pending |
-| dependency absence smoke | passing (prior) | improved | pending | pending |
-| packaging smoke | passing (prior) | unknown | unknown | unknown |
-
-## Acceptance Criteria For "Platform Boot Support"
-
-A platform can be considered boot-supported when:
-
-- the app launches without code changes specific to that machine
-- missing optional dependencies do not crash the app unexpectedly
-- profile load/save works
-- hardware mode switching works
-- unsupported hardware paths fail with clear messaging
-
-## Running the Smoke Test
-
-```
-# From the app root directory:
-python3 scripts/smoke_test.py        # quick pass/fail
-python3 scripts/smoke_test.py -v     # verbose (all checks with detail)
-```
-
-The test requires: `numpy`, `sounddevice`, `pyserial` (hard requirements).
-Guard checks for optional deps (sv_ttk, bleak, scipy, pycaw, winsound) exist, but the current test
-flow now skips hard-runtime-dependent checks cleanly and supports `--guards-only` for guard-only validation.
-
-## Next Validation Steps
-
-1. Run full GUI startup on macOS with installed requirements and verify profile save/load plus BLE permission flow
-2. Run smoke_test.py and GUI startup on Linux (Ubuntu/Debian recommended) — verify ALSA/PipeWire enumeration and serial scan
-3. Run `python3 main.py --rpi` on the real 5-inch Raspberry Pi screen and verify layout, wheel zoom, and hardware permission messaging
-4. Validate PAKT BLE on real hardware (macOS and Linux/RPi)
-5. Run packaging/deployment verification steps from the release checklist
+- macOS `.app` exit check
+- Linux packaging/deployment exit check
+- Raspberry Pi deployment verification

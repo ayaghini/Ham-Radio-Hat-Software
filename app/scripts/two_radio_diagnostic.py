@@ -42,6 +42,23 @@ def _build_radio_cfg(freq: float, squelch: int, bw: int) -> RadioConfig:
     return RadioConfig(frequency=freq, offset=0.0, bandwidth=bw, squelch=squelch)
 
 
+def _validate_device(device_idx: int | None, kind: str) -> None:
+    """Raise ValueError with a clear message if device_idx is not a valid audio device
+    for the requested direction.  Skips validation when device_idx is None (system default)."""
+    if device_idx is None:
+        return
+    import sounddevice as sd
+    try:
+        info = sd.query_devices(device_idx)
+    except Exception as exc:
+        raise ValueError(f"invalid {kind} device index {device_idx}: {exc}") from exc
+    ch_key = "max_output_channels" if kind == "output" else "max_input_channels"
+    if info[ch_key] < 1:
+        raise ValueError(
+            f"device {device_idx} ({info['name']!r}) has no {kind} channels"
+        )
+
+
 def _serial_ptt_stress(
     client: SA818Client, loops: int, ptt_line: str, active_high: bool
 ) -> tuple[int, int]:
@@ -100,18 +117,32 @@ def run(args: argparse.Namespace) -> int:
     audio_dir.mkdir(parents=True, exist_ok=True)
     sample_rate = 48000
 
+    # Pre-validate audio device indices before touching any hardware.
+    # This gives a clear, actionable error rather than a cryptic PortAudio exception
+    # buried inside a test loop iteration.
+    if not args.skip_audio:
+        try:
+            _validate_device(args.output_device, "output")
+            _validate_device(args.input_device,  "input")
+        except ValueError as exc:
+            print(f"\n[error] {exc}", file=sys.stderr)
+            return 1
+
     tx = SA818Client()
     rx = SA818Client()
+    tx_connected = rx_connected = False
     tx_ok = rx_ok = 0
 
     try:
         # ---- Connect ----
         print(f"\nConnecting TX radio on {args.tx_port}…")
         tx.connect(args.tx_port, timeout=1.5)
+        tx_connected = True
         print(f"  TX version: {tx.version()}")
 
         print(f"Connecting RX radio on {args.rx_port}…")
         rx.connect(args.rx_port, timeout=1.5)
+        rx_connected = True
         print(f"  RX version: {rx.version()}")
 
         # ---- Configure ----
@@ -169,15 +200,21 @@ def run(args: argparse.Namespace) -> int:
                     rec_errors.append(exc)
 
             rec_thread = threading.Thread(target=_rec, daemon=True)
+            rec_started = False
             try:
                 time.sleep(max(0.0, args.ptt_pre_ms / 1000.0))
                 rec_thread.start()
+                rec_started = True
                 time.sleep(0.08)   # brief overlap so RX is already open
                 _play_wav(wav_tx, args.output_device, sample_rate)
                 rec_thread.join()
                 if rec_errors:
                     raise rec_errors[0]
             finally:
+                # Ensure the record thread is joined even if _play_wav raised —
+                # without this, _decode_wav would read an incomplete WAV file.
+                if rec_started:
+                    rec_thread.join(timeout=rec_sec + 2.0)
                 time.sleep(max(0.0, args.ptt_post_ms / 1000.0))
                 tx.set_ptt(False, line=args.ptt_line, active_high=args.ptt_active_high)
 
@@ -202,11 +239,12 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     finally:
-        for client, label in [(tx, "TX"), (rx, "RX")]:
-            try:
-                client.set_ptt(False, line=args.ptt_line, active_high=args.ptt_active_high)
-            except Exception:
-                pass
+        for client, label, connected in [(tx, "TX", tx_connected), (rx, "RX", rx_connected)]:
+            if connected:
+                try:
+                    client.set_ptt(False, line=args.ptt_line, active_high=args.ptt_active_high)
+                except Exception:
+                    pass
             try:
                 client.disconnect()
             except Exception:
