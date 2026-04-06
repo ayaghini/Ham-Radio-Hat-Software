@@ -17,9 +17,12 @@ Read only these first:
 Current repo truth:
 - `app/` is the only active app
 - `archive/` contains historical snapshots
-- macOS and Raspberry Pi launch successfully from source
+- macOS source-run validation is largely complete
+- macOS packaged-app validation is substantially complete; remaining checks need Accessibility permission or BLE hardware
+- Raspberry Pi source-run bring-up is confirmed, but item-by-item validation still remains
 - Linux desktop validation is still pending
-- main remaining work is validation, packaging verification, and hardware-backed PAKT validation
+- Linux packaging build has not yet been run
+- main remaining work is Linux/RPi validation, packaging verification, and hardware-backed PAKT validation
 
 Default expectations:
 - prefer small direct fixes over broad rewrites
@@ -28,8 +31,9 @@ Default expectations:
 - do not claim platform support you did not verify
 
 Baseline verification:
-- `python3 -m compileall -q /Users/macmini4/Desktop/Ham-Radio-Hat-Software/app`
+- `python3 -m compileall -q -x '\\.venv' /Users/macmini4/Desktop/Ham-Radio-Hat-Software/app`
 - `python3 /Users/macmini4/Desktop/Ham-Radio-Hat-Software/app/main.py --help`
+- `python3 /Users/macmini4/Desktop/Ham-Radio-Hat-Software/app/scripts/platform_validation.py`
 - any focused checks related to your task
 
 Expected output:

@@ -1,6 +1,6 @@
 # Cross-Platform v4 Packaging Guide
 
-Status date: 2026-04-03
+Status date: 2026-04-05
 App: `app`
 
 ## Source Launchers
@@ -18,14 +18,15 @@ All launchers create/reuse `.venv`, install requirements as needed, and run `mai
 
 | Target | Path | State |
 |---|---|---|
-| Windows | PyInstaller one-file exe | documented, not build-verified |
-| macOS | PyInstaller `.app` + signing/notarization | documented, not build-verified |
-| Linux desktop | PyInstaller binary, AppImage or `.deb` later | documented, not build-verified |
+| Windows | PyInstaller one-file exe | baseline reference |
+| macOS | PyInstaller `.app` + signing/notarization | first build succeeded; substantial exit checks complete |
+| Linux desktop | PyInstaller binary, AppImage or `.deb` later | spec + build script ready; first build not yet run |
 | Raspberry Pi | venv install + launcher/autostart | documented, not deployment-verified |
 
 ## Important Notes
 
 - app data writes to per-user writable locations via `platform_paths.py`
 - macOS packaged BLE needs `NSBluetoothAlwaysUsageDescription`
+- macOS packaged button-click verification still needs Accessibility permission or a human operator run
 - Linux/RPi need system audio libs and typical `dialout` / `bluetooth` access
 - archived packages under `archive/` are historical only

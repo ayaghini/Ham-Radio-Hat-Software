@@ -11,9 +11,7 @@
   "root_files_present": [
     "main.py",
     "requirements.txt",
-    "VERSION",
-    "agent_bootstap/AGENT_CONTEXT.json",
-    "agent_bootstap/PROJECT_COMPONENT_MAP.md"
+    "VERSION"
   ],
   "component_groups": {
     "app_core": [
@@ -9884,7 +9882,7 @@
     },
     {
       "path": "scripts/generate_agent_onboarding_pack.py",
-      "bytes": 10372,
+      "bytes": 10375,
       "lines": 343,
       "module_doc": "Generate AI onboarding artifacts for this repository.",
       "imports": [

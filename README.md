@@ -16,9 +16,9 @@ This repository now centers on [`app`](app), which is the active cross-platform 
 | `PAKT` hardware mode | Implemented | Native BLE-backed third mode alongside `SA818` and `DigiRig` |
 | Whole-app integrity | Stronger | Recent passes fixed mode switching, status routing, startup behavior, and script validation gaps |
 | Cross-platform runtime prep | In progress | macOS/Linux/RPi support work is now implemented in the `v4` codebase, with docs and audit trail updated |
-| Real hardware validation | In progress | macOS item-by-item workflow validation confirmed (profile/audio/serial/PAKT transport/paths); BLE live scan needs hardware; RPi and Linux item-by-item pending |
+| Real hardware validation | In progress | macOS source-run and packaged-app checks are substantially complete; Linux desktop and Raspberry Pi item-by-item validation still remain; BLE live scan still needs hardware |
 | Launcher UX parity | Done | `run_mac.command`, `run_linux.sh`, and `run_rpi.sh` added to the active `v4` app; all four platforms now have first-class source launchers |
-| Packaging verification | Pending | Packaging strategies are documented; real build/exit-check runs still remain |
+| Packaging verification | In progress | macOS: first `.app` build plus substantial exit checks complete; Linux build not yet run |
 
 ### Progress View
 
@@ -28,7 +28,7 @@ PAKT integration            [#########-]  90%
 Cross-platform code prep    [##########] 100%
 Smoke / CI coverage         [#######---]  70%
 Real-device validation      [####------]  40%
-Packaging verification      [##--------]  20%
+Packaging verification      [#######---]  70%
 ```
 
 ### What Changed Recently
@@ -46,13 +46,13 @@ Packaging verification      [##--------]  20%
 
 ### Current Focus
 
-The next useful session should start with functional validation, not bring-up:
+The next useful session should start with the remaining real-platform checks:
 
-1. macOS item-by-item workflow validation
-2. Raspberry Pi item-by-item workflow validation
-3. Linux desktop GUI startup and device enumeration checks
+1. Linux desktop bring-up and `platform_validation.py`
+2. Raspberry Pi item-by-item validation
+3. macOS packaged-app remaining interaction checks (Accessibility permission + BLE hardware)
 4. PAKT BLE hardware validation on real devices
-5. Packaging/build verification against the documented release checklist
+5. Linux packaging/build verification against the documented release checklist
 
 ### Best Jump-In Files
 
@@ -109,7 +109,9 @@ Known current limitations:
 
 - real PAKT BLE hardware validation is still required for full confidence in scan/connect, bonded writes, TX result sequencing, and live telemetry behavior
 - structured PAKT telemetry UI remains basic and is currently surfaced mainly via status/log output
-- macOS source-run startup and Raspberry Pi 5-inch startup/UI are confirmed, but functional validation is still pending on both platforms and Linux desktop validation has not yet been completed
+- Linux desktop still has not had a real validation run
+- Raspberry Pi bring-up is confirmed, but item-by-item workflow validation is still pending
+- macOS packaged-app click-response checks are blocked until Accessibility permission is granted; BLE permission/dialog behavior still needs hardware
 
 ### Raspberry Pi
 

@@ -1003,7 +1003,7 @@ This file is generated. Rebuild with:
 ### scripts/generate_agent_onboarding_pack.py
 
 - Module: Generate AI onboarding artifacts for this repository.
-- Size: `343 lines`, `10372 bytes`
+- Size: `343 lines`, `10375 bytes`
 - Constants: `DOC_ROOT, ROOT, ROOT_FILES, SKIP_DIRS, TARGET_DIRS`
 - Classes:
   - `FuncInfo`  [L35]

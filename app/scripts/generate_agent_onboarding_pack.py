@@ -19,14 +19,14 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DOC_ROOT = ROOT / "agent_bootstrap"
+DOC_ROOT = ROOT / "agent_bootstap"
 TARGET_DIRS = ["app", "scripts"]
 ROOT_FILES = [
     "main.py",
     "requirements.txt",
     "VERSION",
-    "agent_bootstrap/AGENT_CONTEXT.json",
-    "agent_bootstrap/PROJECT_COMPONENT_MAP.md",
+    "agent_bootstap/AGENT_CONTEXT.json",
+    "agent_bootstap/PROJECT_COMPONENT_MAP.md",
 ]
 SKIP_DIRS = {".venv", "__pycache__", ".git", ".vscode", ".claude"}
 

@@ -1,8 +1,8 @@
 # Cross-Platform v4 Roadmap
 
-Status date: 2026-04-03
+Status date: 2026-04-05
 Target app: `app`
-Program status: code prep complete enough for real validation; packaging builds and hardware-backed BLE validation still remain
+Program status: cross-platform prep is in place; macOS validation is farthest along; Linux desktop, Raspberry Pi workflow validation, and hardware-backed BLE still remain
 
 ## Done
 
@@ -15,7 +15,7 @@ Program status: code prep complete enough for real validation; packaging builds 
 ## Confirmed Runtime State
 
 - Windows: baseline platform
-- macOS: source-run bring-up confirmed
+- macOS: source-run bring-up confirmed; packaged-app checks substantially complete
 - Raspberry Pi: source-run bring-up confirmed with `--rpi`
 - Linux desktop: not yet validated in a real session
 
@@ -24,8 +24,8 @@ Program status: code prep complete enough for real validation; packaging builds 
 ### Validation
 
 - Linux desktop bring-up
-- macOS item-by-item workflow validation
 - Raspberry Pi item-by-item workflow validation
+- macOS packaged-app interaction checks requiring Accessibility permission or hardware
 
 ### Hardware
 
@@ -35,20 +35,21 @@ Program status: code prep complete enough for real validation; packaging builds 
 
 ### Packaging
 
-- macOS `.app` build and exit check
+- macOS `.app` first build and substantial exit checks completed; remaining interaction/BLE checks still open
 - Linux packaging/deployment verification
 - Raspberry Pi deployment verification
 
 ## Current Blockers
 
 - no real Linux desktop validation yet
+- macOS packaged-app button-click verification is blocked by Accessibility permission
 - no real PAKT hardware validation yet
-- packaging flows are documented but not build-verified
+- Linux packaging flow is ready but not yet build-verified
 
 ## Immediate Next
 
 1. Run Linux desktop GUI bring-up with `app/run_linux.sh`
-2. Run item-by-item macOS validation with `app/run_mac.command`
-3. Run item-by-item Raspberry Pi validation with `app/run_rpi.sh`
+2. Run item-by-item Raspberry Pi validation with `app/run_rpi.sh`
+3. Finish macOS packaged-app interaction checks after granting Accessibility permission; verify BLE dialog when hardware is available
 4. Validate PAKT BLE on hardware
-5. Run packaging build/exit checks
+5. Run Linux packaging build/exit checks

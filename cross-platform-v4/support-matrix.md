@@ -1,19 +1,19 @@
 # Cross-Platform v4 Support Matrix
 
-Last updated: 2026-04-03
+Last updated: 2026-04-05 (macOS packaged-app checks substantially complete)
 
 ## Platform Status
 
 | Capability | Windows | macOS | Linux | Raspberry Pi | Notes |
 |---|---|---|---|---|---|
 | Startup from source | baseline | confirmed | pending | confirmed | Linux desktop still needs first real run |
-| Profile persistence | baseline | confirmed | pending | pending | macOS SA818/DigiRig/PAKT round-trips confirmed 2026-04-03 |
-| Audio enumeration | baseline | confirmed | pending | pending | macOS: 3 outputs, 1 input confirmed 2026-04-03 |
+| Profile persistence | baseline | confirmed | pending | pending | macOS SA818/DigiRig/PAKT round-trips confirmed 2026-04-04 |
+| Audio enumeration | baseline | confirmed | pending | pending | macOS: 3 outputs, 1 input confirmed 2026-04-04 |
 | Serial scan | baseline | confirmed | likely-ok | likely-ok | macOS `/dev/cu.*` naming confirmed; no hardware ports present |
 | Serial workflows | baseline | likely-ok | likely-ok | likely-ok | real-device validation still needed |
 | DigiRig workflows | baseline | likely-ok | likely-ok | likely-ok | real-device validation still needed |
 | PAKT BLE | baseline | needs hardware | needs hardware | needs hardware | transport module loads on macOS; live scan/permission dialog needs hardware |
-| Packaging path | baseline | documented | documented | documented | build verification still open |
+| Packaging path | baseline | exit-checks-substantial | spec-ready | venv-install | macOS: exit checks substantially complete 2026-04-04 (launch, profile autosave, audio+serial visible in UI, bundle contents); button-click verification needs Accessibility permission; BLE dialog needs hardware; Linux: spec+build scripts ready, build not yet run |
 
 ## Key Platform Notes
 

@@ -110,6 +110,41 @@ def check_tkinter() -> None:
         ck("tkinter importable", True, f"(no display — expected on headless: {e})")
 
 
+def check_display_env() -> None:
+    """Check X11/Wayland display environment on Linux/RPi (SKIP on macOS/Windows).
+
+    On headless Linux this check SKIPs — that is expected when running
+    platform_validation.py for CI or pre-launch dependency checks.
+    On a desktop Linux session DISPLAY should be set and the check passes.
+    """
+    section("Display environment (Linux/RPi)")
+    plat = platform.system()
+    if plat != "Linux":
+        ck("display env", True,
+           "display managed by OS — not checked on this platform", skip=True)
+        return
+
+    import os as _os
+    x11     = _os.environ.get("DISPLAY", "")
+    wayland = _os.environ.get("WAYLAND_DISPLAY", "")
+
+    if x11:
+        ck("DISPLAY set (X11)", True,
+           f"DISPLAY={x11!r} — Tkinter can open windows")
+    elif wayland:
+        ck("WAYLAND_DISPLAY set", True,
+           f"WAYLAND_DISPLAY={wayland!r}")
+        ck("DISPLAY for Tkinter (via XWayland)", False,
+           "Tkinter requires DISPLAY; if XWayland is running: "
+           "export DISPLAY=:0  or  export DISPLAY=$WAYLAND_DISPLAY")
+    else:
+        ck("DISPLAY / WAYLAND_DISPLAY", True,
+           "neither display variable is set — GUI launch will fail; "
+           "for a local desktop session: export DISPLAY=:0  "
+           "(this SKIP is expected when running headlessly for validation)",
+           skip=True)
+
+
 def check_audio() -> None:
     section("Audio enumeration")
     try:
@@ -183,18 +218,24 @@ def check_ble() -> None:
            "install with: pip install bleak   (required for PAKT mode)",
            skip=True)
 
-    # Check dialout group on Linux (serial access)
+    # Check Linux group memberships (serial and BLE access)
     if platform.system() == "Linux":
         import os, grp
-        try:
-            dialout_gid = grp.getgrnam("dialout").gr_gid
-            user_groups = os.getgroups()
-            in_dialout = dialout_gid in user_groups
-            ck("user in dialout group", in_dialout,
-               "run: sudo usermod -aG dialout $USER  then log out/in"
-               if not in_dialout else "serial access OK")
-        except Exception:
-            ck("dialout group check", True, "group not found — skip", skip=True)
+        user_groups = os.getgroups()
+        for grp_name, purpose, hint in [
+            ("dialout",   "serial access (SA818/DigiRig)",
+             "sudo usermod -aG dialout $USER  then log out/in"),
+            ("bluetooth", "BLE access (PAKT mode)",
+             "sudo usermod -aG bluetooth $USER  then log out/in"),
+        ]:
+            try:
+                gid = grp.getgrnam(grp_name).gr_gid
+                in_group = gid in user_groups
+                ck(f"user in {grp_name} group ({purpose})", in_group,
+                   f"run: {hint}" if not in_group else "OK")
+            except KeyError:
+                ck(f"{grp_name} group check", True,
+                   "group not found — skip", skip=True)
 
 
 def check_profile() -> None:
@@ -282,6 +323,95 @@ def check_aprs() -> None:
         ck("APRS modem", False, str(e))
 
 
+def check_scroll_bindings() -> None:
+    """Per-function source check: confirm Linux scroll bindings in widgets.py.
+
+    Covers the 'wheel zoom' RPi / Linux validation item without needing a display.
+    Uses inspect.getsource() to scope each check to the specific function or
+    __init__ that is expected to register the binding — not a whole-file search.
+
+    Three sites are checked:
+      scrollable_frame()      — vertical scroll used by every tab panel
+      AprsMapCanvas.__init__  — offline dot-map zoom (APRS tab)
+      TiledMapCanvas.__init__ — OSM tile-map zoom (Comms tab)
+    Plus the _on_wheel handlers in each canvas class for event routing.
+    """
+    section("Scroll / wheel bindings (Linux compat — per-function source check)")
+    import inspect
+    try:
+        # Import the module; safe on headless Linux (no Tk() created at import time)
+        from app.ui import widgets as _w
+
+        # --- scrollable_frame: vertical scroll in every tab ---
+        sf = inspect.getsource(_w.scrollable_frame)
+        ck("scrollable_frame binds <MouseWheel>", "<MouseWheel>" in sf,
+           "Windows/macOS panel scroll — within scrollable_frame")
+        ck("scrollable_frame binds <Button-4>",   "<Button-4>" in sf,
+           "Linux scroll-up — within scrollable_frame")
+        ck("scrollable_frame binds <Button-5>",   "<Button-5>" in sf,
+           "Linux scroll-down — within scrollable_frame")
+
+        # --- AprsMapCanvas: offline dot-map with zoom+pan ---
+        ac_init = inspect.getsource(_w.AprsMapCanvas.__init__)
+        ck("AprsMapCanvas.__init__ binds <Button-4>", "<Button-4>" in ac_init,
+           "Linux scroll-up — within AprsMapCanvas.__init__")
+        ck("AprsMapCanvas.__init__ binds <Button-5>", "<Button-5>" in ac_init,
+           "Linux scroll-down — within AprsMapCanvas.__init__")
+
+        ac_wheel = inspect.getsource(_w.AprsMapCanvas._on_wheel)
+        ck("AprsMapCanvas._on_wheel checks event.num (Linux)",
+           "event.num" in ac_wheel or 'getattr(event, "num"' in ac_wheel,
+           "Linux Button-4/5 sets event.num — within AprsMapCanvas._on_wheel")
+        ck("AprsMapCanvas._on_wheel checks event.delta (Win/macOS)",
+           "event.delta" in ac_wheel or 'getattr(event, "delta"' in ac_wheel,
+           "Windows/macOS MouseWheel sets event.delta — within AprsMapCanvas._on_wheel")
+
+        # --- TiledMapCanvas: OSM tile-map (Comms tab) ---
+        tc_init = inspect.getsource(_w.TiledMapCanvas.__init__)
+        ck("TiledMapCanvas.__init__ binds <Button-4>", "<Button-4>" in tc_init,
+           "Linux scroll-up — within TiledMapCanvas.__init__")
+        ck("TiledMapCanvas.__init__ binds <Button-5>", "<Button-5>" in tc_init,
+           "Linux scroll-down — within TiledMapCanvas.__init__")
+
+        tc_wheel = inspect.getsource(_w.TiledMapCanvas._on_wheel)
+        ck("TiledMapCanvas._on_wheel checks event.num (Linux)",
+           "event.num" in tc_wheel or 'getattr(event, "num"' in tc_wheel,
+           "Linux Button-4/5 sets event.num — within TiledMapCanvas._on_wheel")
+        ck("TiledMapCanvas._on_wheel checks event.delta (Win/macOS)",
+           "event.delta" in tc_wheel or 'getattr(event, "delta"' in tc_wheel,
+           "Windows/macOS MouseWheel sets event.delta — within TiledMapCanvas._on_wheel")
+
+    except ImportError as exc:
+        ck("widgets module importable", False,
+           f"{exc} — tkinter or numpy may be missing")
+    except AttributeError as exc:
+        ck("scroll binding attribute", False, str(exc))
+    except Exception as exc:
+        ck("scroll bindings check", False, str(exc))
+
+
+def check_launcher_scripts() -> None:
+    """Verify run_linux.sh and run_rpi.sh contain required safety items."""
+    section("Launcher scripts (static check)")
+    import os as _os
+    for name in ("run_linux.sh", "run_rpi.sh"):
+        path = _APP_ROOT / name
+        if not path.exists():
+            ck(f"{name} exists", False, str(path))
+            continue
+        src = path.read_text(encoding="utf-8")
+        ck(f"{name} exists", True)
+        ck(f"{name} pycaw excluded",
+           "grep -v pycaw" in src,
+           "Windows-only pycaw must be excluded on Linux/RPi installs")
+        ck(f"{name} tkinter preflight",
+           "import tkinter" in src or "python3-tk" in src,
+           "Missing tkinter hint — users on bare Debian/Ubuntu need this")
+        ck(f"{name} executable bit",
+           _os.access(path, _os.X_OK),
+           f"run: chmod +x {name}" if not _os.access(path, _os.X_OK) else "OK")
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -296,6 +426,9 @@ if __name__ == "__main__":
     check_python_version()
     check_imports()
     check_tkinter()
+    check_display_env()
+    check_scroll_bindings()
+    check_launcher_scripts()
     check_audio()
     check_serial()
     check_ble()
