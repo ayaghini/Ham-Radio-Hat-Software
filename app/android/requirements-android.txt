@@ -1,0 +1,13 @@
+# Android build requirements for HAM HAT Control Center
+# Install on the build host before running buildozer:
+#   pip install -r requirements-android.txt
+
+buildozer>=1.5.0
+kivy>=2.3.0
+kivymd>=1.2.0
+pillow
+plyer
+bleak>=0.22.0
+pyserial
+numpy
+scipy

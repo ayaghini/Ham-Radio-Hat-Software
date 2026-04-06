@@ -19,6 +19,7 @@ This repository now centers on [`app`](app), which is the active cross-platform 
 | Real hardware validation | In progress | macOS source-run and packaged-app checks are substantially complete; Linux desktop and Raspberry Pi item-by-item validation still remain; BLE live scan still needs hardware |
 | Launcher UX parity | Done | `run_mac.command`, `run_linux.sh`, and `run_rpi.sh` added to the active `v4` app; all four platforms now have first-class source launchers |
 | Packaging verification | In progress | macOS: first `.app` build plus substantial exit checks complete; Linux build not yet run |
+| **Android expansion** | **Phase 2 complete** | Full Kivy/KivyMD app in `app/android/`; SA818 AT commands, APRS TX/RX modem, PAKT mesh bridge, Android foreground service; all smoke tests pass |
 
 ### Progress View
 
@@ -29,6 +30,8 @@ Cross-platform code prep    [##########] 100%
 Smoke / CI coverage         [#######---]  70%
 Real-device validation      [####------]  40%
 Packaging verification      [#######---]  70%
+Android Phase 1 (skeleton)  [##########] 100%
+Android Phase 2 (hardware)  [########--]  80%
 ```
 
 ### What Changed Recently
@@ -46,13 +49,14 @@ Packaging verification      [#######---]  70%
 
 ### Current Focus
 
-The next useful session should start with the remaining real-platform checks:
+The next useful session should start with:
 
-1. Linux desktop bring-up and `platform_validation.py`
-2. Raspberry Pi item-by-item validation
-3. macOS packaged-app remaining interaction checks (Accessibility permission + BLE hardware)
-4. PAKT BLE hardware validation on real devices
-5. Linux packaging/build verification against the documented release checklist
+1. **Android Phase 3** — first `buildozer android debug` APK build on Linux host; device install and functional validation; signing for release
+2. Linux desktop bring-up and `platform_validation.py`
+3. Raspberry Pi item-by-item validation
+4. macOS packaged-app remaining interaction checks (Accessibility permission + BLE hardware)
+5. PAKT BLE hardware validation on real devices
+6. Linux packaging/build verification against the documented release checklist
 
 ### Best Jump-In Files
 
@@ -63,16 +67,20 @@ The next useful session should start with the remaining real-platform checks:
 | Cross-platform task tracker | [`cross-platform-v4/task-board.md`](cross-platform-v4/task-board.md) |
 | Validation checklist | [`cross-platform-v4/validation-plan.md`](cross-platform-v4/validation-plan.md) |
 | Support boundaries | [`cross-platform-v4/support-matrix.md`](cross-platform-v4/support-matrix.md) |
+| Android architecture plan | [`cross-platform-v4/android-plan.md`](cross-platform-v4/android-plan.md) |
+| Android app entry point | [`app/android/main.py`](app/android/main.py) |
+| Android build script | [`app/android/run_android.sh`](app/android/run_android.sh) |
 | PAKT workspace | [`integrations/pakt/`](integrations/pakt/) |
 
 ## Repository Layout
 
 - `app` - active cross-platform `v4` app (`VERSION` = `4.0`); current source of truth
+- `app/android` - Android Kivy/KivyMD app (Phase 1 complete); buildozer → APK
 - `archive/windows-v3` - previous Windows snapshot
 - `archive/windows-v1` - early Windows package with its own docs/build scripts
 - `archive/pi-legacy` - legacy Raspberry Pi package for SA818 bring-up/control; stale relative to the active `v4` app
 - `integrations/pakt` - PAKT integration roadmap, protocol notes, onboarding, fit analysis, and audit trail
-- `cross-platform-v4` - cross-platform migration roadmap, task board, validation plan, packaging plan, and agent handoff docs
+- `cross-platform-v4` - cross-platform migration roadmap, task board, validation plan, packaging plan, Android plan, and agent handoff docs
 
 ## Hardware Repository
 
@@ -164,6 +172,24 @@ cd app
 ```
 
 All launchers: create/reuse a local `.venv`, install requirements (excluding the Windows-only `pycaw`), and launch `main.py`. On Linux and Raspberry Pi, `python3-tk` must be installed system-wide before first run (`sudo apt install python3-tk`).
+
+**Android (desktop dev mode):**
+```bash
+cd app/android
+pip install kivy kivymd bleak pyserial plyer
+PYTHONPATH=../:./../.. python3 main.py
+# or:
+./run_android.sh dev
+```
+
+**Android (build APK — requires Linux host + Buildozer):**
+```bash
+pip install buildozer
+cd app/android
+./run_android.sh debug          # build only
+./run_android.sh deploy         # build + install on connected device
+./run_android.sh run            # build + install + launch
+```
 
 ### Legacy Raspberry Pi Package
 

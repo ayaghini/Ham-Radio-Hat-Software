@@ -13,6 +13,9 @@ Status keys: `todo`, `in_progress`, `done`
 | CP-540 | in_progress | macOS packaging verification | exit checks substantially complete (2026-04-04): launch/no-crash, profile autosave (status bar confirmed), audio devices visible in UI (Output: LG ULTRAFINE, Input: WH-1000XM4 in Control tab), serial port auto-detected in UI (/dev/cu.debug-console), bundle contents confirmed, plist permissions present; remaining: button-click verification (blocked by macOS 15 Accessibility requirement) and BLE dialog (needs hardware) |
 | CP-541 | todo | Linux packaging verification | spec + build script ready (`app/packaging/`); first real Linux build still needs to be run |
 | CP-542 | todo | Raspberry Pi deployment verification | venv install + autostart flow verified on device |
+| CP-600A | done | Android expansion — Phase 1 implementation | `app/android/` directory created with full Kivy/KivyMD app; all 4 screens + HAL layer + buildozer spec; engine imports verified; smoke test passed 2026-04-05 |
+| CP-601A | done | Android Phase 2 — hardware wiring | RadioController (SA818 AT), AprsModemBridge (TX/RX), PaktServiceBridge (mesh), foreground_service (Android BG); all screens wired; smoke test PASS 2026-04-06 |
+| CP-602A | todo | Android buildozer APK build | First `buildozer android debug` build on Linux host; install on device and validate launch |
 
 ## Completed Foundations
 
@@ -32,7 +35,19 @@ Status keys: `todo`, `in_progress`, `done`
 | CP-600 | done | Repo cleanup | `app/` canonical, `archive/` for historical snapshots |
 | CP-601 | done | Launcher parity | all supported OS targets have source launchers |
 
+## Completed Foundations (Android)
+
+| ID | Status | Task | Notes |
+|---|---|---|---|
+| CP-600A | done | Android architecture plan | `cross-platform-v4/android-plan.md` created; Kivy/KivyMD chosen over React Native/Flutter for Python code reuse |
+| CP-600A | done | Android app skeleton | `app/android/` full directory: main.py, engine_bridge.py, hal/, screens/, buildozer.spec, run_android.sh |
+| CP-600A | done | Android HAL layer | `hal/ble_manager.py` (bleak async), `hal/serial_manager.py` (usbserial4a/pyserial), `hal/audio_manager.py`, `hal/paths.py` |
+| CP-600A | done | Android screens | 4 screens (Control/APRS/Setup/Mesh) with load_profile/collect_profile; responsive phone+tablet layout |
+| CP-600A | done | Android engine bridge | `engine_bridge.py` — sys.path injection so `app.engine.*` imports cleanly from `app/android/` |
+| CP-600A | done | Android smoke test | All imports + HamHatApp() instantiation verified 2026-04-05 (kivy 2.3.1, kivymd 1.2.0) |
+
 ## Notes
 
 - Use `app/audit_v4.md` for current open app/script risks.
 - Do not spend time on archived packages unless a historical reference is required.
+- Android source is in `app/android/`; run desktop dev mode with `./run_android.sh dev` or `PYTHONPATH=../:./../.. python3 main.py` from `app/android/`.

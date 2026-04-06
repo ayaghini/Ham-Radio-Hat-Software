@@ -102,6 +102,48 @@ Telemetry still lands in general log/status output rather than a dedicated panel
 
 Low priority unless chunking defects start surfacing in production.
 
+## Android Expansion (Phase 1 — 2026-04-05)
+
+Implementation complete in `app/android/`. See `cross-platform-v4/android-plan.md` for full architecture doc.
+
+Files created:
+- `app/android/main.py` — HamHatApp (MDApp); responsive phone/tablet build; autosave; on_pause survival
+- `app/android/engine_bridge.py` — sys.path injection; re-uses app.engine.* unchanged
+- `app/android/buildozer.spec` — API 33, minAPI 26, arm64-v8a, USB host, BLE permissions
+- `app/android/run_android.sh` — dev/debug/release/deploy/run/logcat/clean modes
+- `app/android/requirements-android.txt` — buildozer, kivy, kivymd, bleak, numpy, scipy, plyer
+- `app/android/hal/__init__.py` — HAL package (named hal/ not platform/ to avoid stdlib collision)
+- `app/android/hal/paths.py` — Android: App.user_data_dir; Desktop: delegates to engine
+- `app/android/hal/ble_manager.py` — async bleak; BleState machine; background asyncio thread
+- `app/android/hal/serial_manager.py` — usbserial4a on Android; pyserial on desktop
+- `app/android/hal/audio_manager.py` — jnius AudioTrack on Android; delegates on desktop
+- `app/android/screens/control_screen.py` — SA818/DigiRig/PAKT panels; BLE state chip; audio routing
+- `app/android/screens/aprs_screen.py` — beacon builder; GPS (plyer); packet log; message send
+- `app/android/screens/setup_screen.py` — profile save/load/reset; PTT, APRS, PAKT, audio test
+- `app/android/screens/mesh_screen.py` — chat log; node list; compose bar; BLE connect/disconnect hooks
+
+Smoke test result (2026-04-05, macOS, kivy 2.3.1, kivymd 1.2.0):
+- All 15 module imports: PASS
+- HamHatApp() instantiation: PASS
+- Engine bridge (app.engine.*): PASS
+
+Phase 2 implementation complete (2026-04-06):
+- `hal/radio_controller.py` — SA818 AT protocol (DMOCONNECT/DMOSETGROUP/DMOSETVOLUME/SETFILTER/SETTAIL) over SerialManager; `RadioControllerAsync` for non-blocking UI calls
+- `hal/aprs_modem_bridge.py` — TX: engine AFSK encoder → Android AudioTrack / sounddevice; RX: AudioRecord / sounddevice → engine decoder; PTT via RadioController
+- `hal/pakt_service_bridge.py` — PaktService wrapped with Clock.schedule_once for all callbacks; full mesh command API
+- `hal/foreground_service.py` — Android foreground notification via jnius startForeground; keeps BLE alive in background
+- All screens updated: control_screen (apply_radio, connect_serial wired), aprs_screen (real TX/RX), mesh_screen (real PAKT send)
+- main.py: all Phase 2 managers instantiated + injected; PaktServiceBridge.start() called; foreground service launched on Android
+- APRS payload round-trip verified: `!4916.96N/12307.24W>HAM HAT`, `:W1AW     :Hello from Android!{42`
+- Phase 2 smoke test: PASS (2026-04-06)
+
+Remaining hardware validation (needs physical Android device + Linux build host):
+- `buildozer android debug` APK build
+- SA818 USB OTG serial (DMOCONNECT response)
+- PAKT BLE scan + connect (bleak Android backend)
+- APRS RX decode (AudioRecord → engine modem)
+- APRS TX play (engine AFSK → AudioTrack)
+
 ## Next Order
 
 1. Linux desktop bring-up — run `app/run_linux.sh`, then `python3 app/scripts/platform_validation.py`
@@ -109,3 +151,4 @@ Low priority unless chunking defects start surfacing in production.
 3. macOS packaged-app remaining checks — grant Accessibility permission and verify Refresh-button click response; BLE permission dialog still needs hardware
 4. PAKT hardware validation
 5. Linux packaging build — `cd app && ./packaging/build_linux.sh`; run through exit checklist
+6. Android Phase 2 — hardware wiring + first buildozer APK build
