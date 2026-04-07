@@ -14,6 +14,7 @@ from __future__ import annotations
 import wave
 from pathlib import Path
 from typing import Optional
+import re
 
 try:
     import winsound  # type: ignore
@@ -102,16 +103,23 @@ def _list_devices(direction: str) -> list[tuple[int, str]]:
         name_counts[key] = name_counts.get(key, 0) + 1
 
     labelled: list[tuple[int, str]] = []
-    seen_counts: dict[str, int] = {}
-    for _, idx, name, _ in out:
+    seen_counts: dict[tuple[str, str], int] = {}
+    for _, idx, name, hostapi in out:
         key = name.strip().lower()
         if name_counts[key] > 1:
-            seen_counts[key] = seen_counts.get(key, 0) + 1
-            label = f"{name} [{seen_counts[key]}]"
+            host_key = str(hostapi).strip()
+            pair_key = (key, host_key)
+            seen_counts[pair_key] = seen_counts.get(pair_key, 0) + 1
+            label = f"{name} [{host_key} {seen_counts[pair_key]}]"
         else:
             label = name
         labelled.append((idx, label))
     return labelled
+
+
+def _base_device_name(label: str) -> str:
+    """Strip UI disambiguation suffixes like '[ALSA 1]' or '[2]'."""
+    return re.sub(r"\s*\[[^]]+\]\s*$", "", label.strip())
 
 
 def list_output_devices() -> list[tuple[int, str]]:
@@ -173,6 +181,7 @@ def play_wav_blocking_compatible(path: Path, device_index: int) -> None:
     mono_f = mono.astype(np.float32) / 32768.0
 
     info = sd.query_devices(device_index)
+    selected_name = str(info.get("name", f"Device {device_index}"))
     dst_rate = int(round(float(info.get("default_samplerate", src_rate) or src_rate)))
     if dst_rate <= 0:
         dst_rate = int(src_rate)
@@ -188,10 +197,40 @@ def play_wav_blocking_compatible(path: Path, device_index: int) -> None:
     sd.stop()
     try:
         sd.play(mono_f, samplerate=dst_rate, device=device_index, blocking=True)
-    except Exception:
+        return
+    except Exception as exc:
+        err_text = str(exc)
+        if "Illegal combination of I/O devices" in err_text or "-9993" in err_text:
+            base = _base_device_name(selected_name).lower()
+            try:
+                for alt_idx, dev in enumerate(sd.query_devices()):
+                    if alt_idx == device_index:
+                        continue
+                    if int(dev.get("max_output_channels", 0) or 0) < 1:
+                        continue
+                    alt_name = str(dev.get("name", "")).strip().lower()
+                    if _base_device_name(alt_name) != base:
+                        continue
+                    alt_rate = int(round(float(dev.get("default_samplerate", src_rate) or src_rate)))
+                    if alt_rate <= 0:
+                        alt_rate = int(src_rate)
+                    alt_audio = mono_f
+                    if alt_rate != src_rate and len(mono_f) > 1:
+                        src_n = len(mono_f)
+                        dst_n = max(1, int(round(src_n * alt_rate / src_rate)))
+                        xp = np.linspace(0.0, 1.0, src_n, endpoint=False)
+                        xq = np.linspace(0.0, 1.0, dst_n, endpoint=False)
+                        alt_audio = np.interp(xq, xp, mono_f).astype(np.float32)
+                    try:
+                        sd.play(alt_audio, samplerate=alt_rate, device=alt_idx, blocking=True)
+                        return
+                    except Exception:
+                        pass
+            except Exception:
+                pass
         max_ch = int(info.get("max_output_channels", 0) or 0)
         if max_ch < 2:
-            raise
+            raise exc
         shaped = np.zeros((len(mono_f), max_ch), dtype=np.float32)
         shaped[:, 0] = mono_f
         sd.play(shaped, samplerate=dst_rate, device=device_index, blocking=True)
