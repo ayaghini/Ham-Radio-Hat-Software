@@ -485,6 +485,11 @@ class HamHatApp(tk.Tk):
             self._set_status(f"Connected: {evt.port}")
             # Keep port_var in sync so manual reconnect after disconnect uses the right port
             self.port_var.set(evt.port)
+            # Composite USB radio interfaces can finish enumerating their audio codecs
+            # slightly after the serial side is already connectable. Refresh shortly
+            # after connect so TX/RX device comboboxes catch newly-present USB audio.
+            self.after(250, self.refresh_audio_devices)
+            self.after(500, self._auto_find_audio_background)
 
         elif isinstance(evt, _DisconnectEvt):
             self._conn_lbl.configure(text="⚫ Disconnected", foreground="#e07070")
