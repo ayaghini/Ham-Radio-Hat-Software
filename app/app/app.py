@@ -1193,8 +1193,10 @@ class HamHatApp(tk.Tk):
             self._set_status("TX already in progress")
             return
         out_dev = getattr(self, "_output_dev_idx", None)
+        out_name = getattr(self, "_output_dev_name", "")
         if out_dev is None:
             out_dev = self._resolve_output_dev_fallback()
+            out_name = next((name for idx, name in list_output_devices() if idx == out_dev), out_name)
         ptt = self._make_ptt_config()
         if self._hw_mode() == "PAKT":
             # Audio routing test is still useful in PAKT mode; skip PTT keying.
@@ -1206,11 +1208,14 @@ class HamHatApp(tk.Tk):
             except Exception:
                 port = "(unknown)"
             self._set_status(
-                f"Test tone queued: out_dev={out_dev}, PTT={ptt.line}, active_high={ptt.active_high}, uConsole_HAT port={port}"
+                f"Test tone queued: out_dev={out_dev} ({out_name or 'unknown'}), "
+                f"PTT={ptt.line}, active_high={ptt.active_high}, uConsole_HAT port={port}"
             )
         self.aprs.play_test_tone(freq, duration, out_dev, ptt, ptt_serial_port=dr_port)
         if self._hw_mode() != "SA818":
-            self._set_status(f"Test tone: {freq:.0f} Hz  {duration:.1f}s → device {out_dev}")
+            self._set_status(
+                f"Test tone: {freq:.0f} Hz  {duration:.1f}s → device {out_dev} ({out_name or 'unknown'})"
+            )
 
     def play_manual_aprs_packet(self, text: str) -> None:
         if self.audio.tx_active:

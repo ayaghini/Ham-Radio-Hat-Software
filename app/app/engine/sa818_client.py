@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import threading
 import time
+import errno
 from typing import Optional
 
 import serial
@@ -110,6 +111,27 @@ class SA818Client:
                 finally:
                     self.ser = None
 
+    def _handle_serial_io_failure(self, exc: Exception, context: str) -> None:
+        """Close the port and raise a reconnect-oriented error after hard serial I/O failures."""
+        err_no = getattr(exc, "errno", None)
+        text = str(exc).lower()
+        is_io_failure = (
+            err_no in {errno.EIO, 5}
+            or "input/output error" in text
+            or "device disconnected" in text
+            or "device reports readiness to read but returned no data" in text
+        )
+        if not is_io_failure:
+            raise SA818Error(f"{context}: {exc}") from exc
+        try:
+            self.disconnect()
+        except Exception:
+            pass
+        raise SA818Error(
+            f"{context}: serial device reset or disappeared ({exc}). "
+            "Refresh ports and reconnect the radio."
+        ) from exc
+
     # ------------------------------------------------------------------
     # Raw command
     # ------------------------------------------------------------------
@@ -120,15 +142,21 @@ class SA818Client:
             raise SA818Error("Not connected")
         self._safe_modem_lines()
         self._flush_rx()
-        self.ser.write((cmd + self.EOL).encode("ascii"))
-        self.ser.flush()
+        try:
+            self.ser.write((cmd + self.EOL).encode("ascii"))
+            self.ser.flush()
+        except Exception as exc:
+            self._handle_serial_io_failure(exc, f"Write failed for {cmd!r}")
         if pause > 0:
             time.sleep(pause)
         timeout_s = float(self.ser.timeout or 1.0)
         deadline = time.monotonic() + max(1.2, timeout_s + 0.4)
         raw = ""
         while time.monotonic() < deadline:
-            line = self.ser.readline().decode("ascii", errors="replace").strip()
+            try:
+                line = self.ser.readline().decode("ascii", errors="replace").strip()
+            except Exception as exc:
+                self._handle_serial_io_failure(exc, f"Read failed for {cmd!r}")
             if line:
                 raw = line
                 break
@@ -210,7 +238,7 @@ class SA818Client:
             except SA818Error:
                 raise
             except Exception as exc:
-                raise SA818Error(f"PTT set failed on {line_name}: {exc}") from exc
+                self._handle_serial_io_failure(exc, f"PTT set failed on {line_name}")
 
     def _release_ptt_safe(self) -> None:
         """Release PTT without raising. Call before closing port."""
