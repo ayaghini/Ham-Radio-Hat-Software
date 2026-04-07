@@ -80,8 +80,8 @@ class CommsTab(ttk.Frame):
                    width=8).pack(side="left")
         ttk.Button(btn_row, text="■ Stop", command=self._app.stop_rx_monitor,
                    width=8).pack(side="left", padx=(4, 0))
-        ttk.Button(btn_row, text="One-Shot", command=self._app.rx_one_shot,
-                   width=8).pack(side="left", padx=(4, 0))
+        ttk.Button(btn_row, text="Decode Once", command=self._app.rx_one_shot,
+                   width=10).pack(side="left", padx=(4, 0))
         self._rx_status_lbl = ttk.Label(btn_row, text="", foreground="#5db85d")
         self._rx_status_lbl.pack(side="left", padx=(10, 0))
 
@@ -109,7 +109,9 @@ class CommsTab(ttk.Frame):
         row += 1
 
         self._contacts_lb = tk.Listbox(lf, height=cfg.contacts_height,
-                                       exportselection=False, font=(_mf, 9))
+                                       exportselection=False, font=(_mf, 9),
+                                       selectbackground="#1a4a6e",
+                                       selectforeground="#ffffff")
         self._contacts_lb.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 4))
         self._contacts_lb.bind("<<ListboxSelect>>", self._on_contact_select)
 
@@ -129,7 +131,9 @@ class CommsTab(ttk.Frame):
         row += 1
 
         self._groups_lb = tk.Listbox(gf, height=cfg.groups_height,
-                                     exportselection=False, font=(_mf, 9))
+                                     exportselection=False, font=(_mf, 9),
+                                     selectbackground="#1a4a6e",
+                                     selectforeground="#ffffff")
         self._groups_lb.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 4))
         self._groups_lb.bind("<<ListboxSelect>>", self._on_group_select)
 
@@ -154,7 +158,9 @@ class CommsTab(ttk.Frame):
         row += 1
 
         self._heard_lb = tk.Listbox(hf, height=cfg.heard_height,
-                                    exportselection=False, font=(_mf, 9))
+                                    exportselection=False, font=(_mf, 9),
+                                    selectbackground="#1a4a6e",
+                                    selectforeground="#ffffff")
         self._heard_lb.grid(row=0, column=0, sticky="ew", pady=(0, 4))
         self._heard_lb.bind("<<ListboxSelect>>", self._on_heard_select)
         ttk.Button(hf, text="Clear Heard", command=self._clear_heard).grid(
@@ -255,15 +261,24 @@ class CommsTab(ttk.Frame):
         self._compose_text = tk.Text(cf, height=cfg.compose_height,
                                      wrap="word", font=(_mf, 9))
         self._compose_text.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        # Enter sends; Shift+Enter inserts a newline (handled by checking event.state).
+        # <Shift-Return> is NOT bound separately — the state check in _on_compose_enter
+        # correctly allows the default newline insertion when Shift is held.
         self._compose_text.bind("<Return>", self._on_compose_enter)
-        self._compose_text.bind("<Shift-Return>", lambda _e: None)
+        # Ctrl+Enter as an alternative send shortcut (handy on RPi touchscreen)
+        self._compose_text.bind("<Control-Return>", lambda _e: (self._send_message(), "break")[1])
 
         comp_btn_row = ttk.Frame(cf)
         comp_btn_row.grid(row=1, column=0, sticky="e")
         self._reliable_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(comp_btn_row, text="Reliable",
-                        variable=self._reliable_var).pack(side="left", padx=(0, 8))
-        ttk.Button(comp_btn_row, text="Send",
+        _rel_cb = ttk.Checkbutton(comp_btn_row, text="Reliable",
+                                   variable=self._reliable_var)
+        _rel_cb.pack(side="left", padx=(0, 8))
+        from .widgets import Tooltip
+        Tooltip(_rel_cb,
+                "When checked, the message is sent with APRS ACK/retry (reliable delivery).\n"
+                "The recipient must support APRS message acknowledgement.")
+        ttk.Button(comp_btn_row, text="Send  ↵",
                    command=self._send_message).pack(side="left")
 
         # ---- APRS Log ----
@@ -510,16 +525,15 @@ class CommsTab(ttk.Frame):
         comms = self._app.comms
         active = comms.active_thread
 
-        # Save current selections so we can restore them after rebuild
-        prev_contact_sel = self._contacts_lb.curselection()
-        prev_group_sel = self._groups_lb.curselection()
-
         self._contacts_lb.delete(0, "end")
         for i, c in enumerate(comms.contacts):
             thread_key = c
             unread = comms.unread_for_thread(thread_key)
             label = f"{c}  ● new" if unread else c
             self._contacts_lb.insert("end", label)
+            # Colour unread entries amber so they stand out immediately
+            if unread:
+                self._contacts_lb.itemconfigure(i, foreground="#f5a623")
             if thread_key == active:
                 self._contacts_lb.selection_set(i)
 
@@ -529,6 +543,8 @@ class CommsTab(ttk.Frame):
             unread = comms.unread_for_thread(thread_key)
             label = f"{name}  ({len(members)})  ● new" if unread else f"{name}  ({len(members)})"
             self._groups_lb.insert("end", label)
+            if unread:
+                self._groups_lb.itemconfigure(i, foreground="#f5a623")
             if thread_key == active:
                 self._groups_lb.selection_set(i)
 
@@ -542,6 +558,8 @@ class CommsTab(ttk.Frame):
             unread = comms.unread_for_thread(call)
             label = f"{call}  ● new" if unread else call
             self._heard_lb.insert("end", label)
+            if unread:
+                self._heard_lb.itemconfigure(i, foreground="#f5a623")
             if call == active:
                 self._heard_lb.selection_set(i)
 

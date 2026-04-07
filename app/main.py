@@ -45,9 +45,10 @@ def main() -> int:
         default=False,
         help=(
             "Raspberry Pi / small-screen mode.  Optimised for a 5-inch "
-            "1280×720 display: sets window geometry to 1280x720+0+0, "
-            "increases tk scaling to 1.5, and reduces widget heights to fit "
-            "the 720 px vertical budget.  Implies --geometry 1280x720+0+0 "
+            "1280×720 display: leaves room for the Pi top panel using "
+            "geometry 1280x680+0+28, increases tk scaling to 1.5, and "
+            "reduces widget heights to fit the available vertical budget.  "
+            "Implies --geometry 1280x680+0+28 "
             "and --scale 1.5 unless overridden."
         ),
     )
@@ -68,7 +69,7 @@ def main() -> int:
         default=None,
         metavar="WxH+X+Y",
         help=(
-            "Override the initial window geometry, e.g. '1280x720+0+0'. "
+            "Override the initial window geometry, e.g. '1280x680+0+28'. "
             "Default: window manager decides."
         ),
     )
@@ -111,4 +112,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

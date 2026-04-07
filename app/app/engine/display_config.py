@@ -130,10 +130,11 @@ class DisplayConfig:
 
         Vertical budget (approximate):
           720px screen
+          − 28px Raspberry Pi top panel / menu bar
           − 24px OS title bar (LXDE/Openbox default)
           − 28px Notebook tab bar (at scale 1.5)
           − 26px status bar
-          = ~642px usable content area
+          = ~614px usable content area
 
         Heights are tuned so the busiest tab (APRS Comms) fits without
         scrolling at 1280×720.  compact_padding=2 recovers ~30px of
@@ -141,14 +142,14 @@ class DisplayConfig:
         """
         return DisplayConfig(
             scale=1.5,
-            geometry="1280x720+0+0",
+            geometry="1280x680+0+28",
             fullscreen=False,
             mono_font="TkFixedFont",
             ui_font="TkDefaultFont",
             mono_size=9,
             ui_size=10,
             # Tightened heights for the 720px vertical budget
-            log_height_main=4,
+            log_height_main=3,
             log_height_comms=6,
             log_height_aprs=3,
             map_height=120,
@@ -158,7 +159,7 @@ class DisplayConfig:
             compose_height=2,
             route_tree_height=4,
             mesh_log_height=4,
-            compact_padding=2,
+            compact_padding=1,
         )
 
     @staticmethod

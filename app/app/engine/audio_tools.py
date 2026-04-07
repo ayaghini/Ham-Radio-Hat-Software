@@ -59,15 +59,29 @@ def _list_devices(direction: str) -> list[tuple[int, str]]:
     _EXCLUDED_HOST_APIS = {"Windows DirectSound"}
 
     # Preferred host API rank by platform:
-    #   0 = best (WASAPI on Windows, Core Audio on macOS, ALSA/PipeWire on Linux)
-    #   1 = secondary (MME on Windows)
+    #   0 = best  (WASAPI/CoreAudio/PipeWire/PulseAudio — sound-server-level, shared access)
+    #   1 = good  (MME on Windows, ALSA direct on Linux — exclusive hw: nodes; conflicts with
+    #              sound servers when both are present in the same PortAudio session)
     #   2 = low-level / pro audio (WDM-KS, JACK)
     #   3 = everything else
+    #
+    # IMPORTANT — Linux/RPi note:
+    #   On modern Linux (RPi Bookworm, Ubuntu 22.04+) PipeWire or PulseAudio is the active
+    #   sound server.  PortAudio exposes BOTH the sound-server entries (rank 0) AND the raw
+    #   ALSA hw: entries (rank 1).  Selecting an ALSA hw: device while the sound server holds
+    #   it exclusively triggers PortAudio error -9993 "Illegal combination of I/O devices"
+    #   and can cascade into a USB composite-device reset (killing both audio and serial on
+    #   the same HAT).
+    #
+    #   Giving ALSA rank 1 ensures the filter selects ONLY PipeWire/PulseAudio when either
+    #   is present.  On minimal systems without a sound server only ALSA appears, so rank 1
+    #   devices survive the ≤1 fallback filter unchanged.
     _HOST_API_RANK: dict[str, int] = {
         "Windows WASAPI": 0,        # Windows: preferred
         "Core Audio": 0,            # macOS: preferred
-        "ALSA": 0,                  # Linux: common system default
-        "PipeWire": 0,              # Linux: modern (preferred over ALSA where present)
+        "PipeWire": 0,              # Linux: modern sound server (preferred)
+        "PulseAudio": 0,            # Linux: common sound server on older Debian/Ubuntu/RPi
+        "ALSA": 1,                  # Linux: direct hw: access — conflicts with sound servers
         "MME": 1,                   # Windows: secondary
         "JACK Audio Connection Kit": 2,
     }
@@ -97,6 +111,9 @@ def _list_devices(direction: str) -> list[tuple[int, str]]:
     out = [x for x in out if "sound mapper" not in x[2].strip().lower()]
     out.sort(key=lambda x: (x[2].lower(), x[1]))
 
+    import platform as _platform
+    _is_linux = _platform.system() == "Linux"
+
     name_counts: dict[str, int] = {}
     for _, _, name, _ in out:
         key = name.strip().lower()
@@ -106,11 +123,18 @@ def _list_devices(direction: str) -> list[tuple[int, str]]:
     seen_counts: dict[tuple[str, str], int] = {}
     for _, idx, name, hostapi in out:
         key = name.strip().lower()
+        host_key = str(hostapi).strip()
+        pair_key = (key, host_key)
         if name_counts[key] > 1:
-            host_key = str(hostapi).strip()
-            pair_key = (key, host_key)
             seen_counts[pair_key] = seen_counts.get(pair_key, 0) + 1
             label = f"{name} [{host_key} {seen_counts[pair_key]}]"
+        elif _is_linux:
+            # On Linux always append the host-API so the operator can confirm which
+            # backend (PipeWire / PulseAudio / ALSA) is in use, even when device
+            # names are unique.  This avoids confusion when two host APIs expose the
+            # same physical hardware under different indices.
+            seen_counts[pair_key] = seen_counts.get(pair_key, 0) + 1
+            label = f"{name} [{host_key}]"
         else:
             label = name
         labelled.append((idx, label))
@@ -182,6 +206,15 @@ def play_wav_blocking_compatible(path: Path, device_index: int) -> None:
 
     info = sd.query_devices(device_index)
     selected_name = str(info.get("name", f"Device {device_index}"))
+    # Capture host API info for error messages and same-API fallback search
+    try:
+        _hostapis = sd.query_hostapis()
+        _ha_idx = int(info.get("hostapi", 0))
+        selected_hostapi = str(_hostapis[_ha_idx].get("name", "?")) if _ha_idx < len(_hostapis) else "?"
+    except Exception:
+        _hostapis = []
+        selected_hostapi = "?"
+
     dst_rate = int(round(float(info.get("default_samplerate", src_rate) or src_rate)))
     if dst_rate <= 0:
         dst_rate = int(src_rate)
@@ -201,15 +234,28 @@ def play_wav_blocking_compatible(path: Path, device_index: int) -> None:
     except Exception as exc:
         err_text = str(exc)
         if "Illegal combination of I/O devices" in err_text or "-9993" in err_text:
+            # Attempt same-name, same-host-API fallback.  Restricting to the same
+            # host API avoids cross-API confusion (e.g., selecting a PipeWire device
+            # as fallback when we were already trying ALSA — or vice versa).
             base = _base_device_name(selected_name).lower()
             try:
-                for alt_idx, dev in enumerate(sd.query_devices()):
+                all_devs = sd.query_devices()
+                for alt_idx, dev in enumerate(all_devs):
                     if alt_idx == device_index:
                         continue
                     if int(dev.get("max_output_channels", 0) or 0) < 1:
                         continue
                     alt_name = str(dev.get("name", "")).strip().lower()
                     if _base_device_name(alt_name) != base:
+                        continue
+                    # Only try devices on the same host API as the failed device
+                    alt_ha_idx = int(dev.get("hostapi", -1))
+                    alt_ha_name = (
+                        str(_hostapis[alt_ha_idx].get("name", ""))
+                        if _hostapis and 0 <= alt_ha_idx < len(_hostapis)
+                        else ""
+                    )
+                    if alt_ha_name != selected_hostapi:
                         continue
                     alt_rate = int(round(float(dev.get("default_samplerate", src_rate) or src_rate)))
                     if alt_rate <= 0:
@@ -228,6 +274,13 @@ def play_wav_blocking_compatible(path: Path, device_index: int) -> None:
                         pass
             except Exception:
                 pass
+            # Re-raise with host-API context to help diagnose device conflicts
+            raise RuntimeError(
+                f"Playback failed on {selected_name!r} [{selected_hostapi}] dev={device_index}: "
+                f"{exc}  "
+                f"(Tip: on Linux/RPi, ensure PipeWire or PulseAudio is the active audio "
+                f"backend and select a {selected_hostapi!r} device, not a raw ALSA hw: device)"
+            ) from exc
         max_ch = int(info.get("max_output_channels", 0) or 0)
         if max_ch < 2:
             raise exc

@@ -143,8 +143,10 @@ class MeshTab(ttk.Frame):
         self._disc_target_var = tk.StringVar()
         self._disc_entry = ttk.Entry(lf, textvariable=self._disc_target_var, width=14)
         self._disc_entry.grid(row=0, column=1, sticky="ew", padx=(6, 0), pady=2)
+        # Enter in callsign field triggers discovery
+        self._disc_entry.bind("<Return>", lambda _e: self._discover())
 
-        self._disc_btn = ttk.Button(lf, text="Discover Route", command=self._discover)
+        self._disc_btn = ttk.Button(lf, text="▶ Discover Route", command=self._discover)
         self._disc_btn.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 2))
 
         ttk.Label(lf, text="Last Result:").grid(row=2, column=0, sticky="w", pady=2)
@@ -210,12 +212,17 @@ class MeshTab(ttk.Frame):
         self._send_dst_var = tk.StringVar()
         self._send_dst_entry = ttk.Entry(lf, textvariable=self._send_dst_var, width=14)
         self._send_dst_entry.grid(row=0, column=1, sticky="ew", padx=(6, 0), pady=2)
+        # Tab from destination moves focus to message body
+        self._send_dst_entry.bind("<Return>", lambda _e: self._send_text.focus_set())
 
         ttk.Label(lf, text="Message:").grid(row=1, column=0, sticky="nw", pady=2)
         self._send_text = tk.Text(lf, height=4, width=28, wrap="word")
         self._send_text.grid(row=1, column=1, sticky="nsew", padx=(6, 0), pady=2)
+        # Ctrl+Enter sends from message body (plain Enter inserts newline)
+        self._send_text.bind("<Control-Return>",
+                             lambda _e: (self._send_mesh(), "break")[1])
 
-        self._send_btn = ttk.Button(lf, text="Send", command=self._send_mesh)
+        self._send_btn = ttk.Button(lf, text="▶ Send", command=self._send_mesh)
         self._send_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 
         self._send_widgets = [self._send_dst_entry, self._send_text, self._send_btn]
@@ -230,27 +237,44 @@ class MeshTab(ttk.Frame):
         lf.columnconfigure(0, weight=1)
         lf.rowconfigure(1, weight=1)
 
-        # Stats counters grid
+        # Stats counters grid — label column + value column, 2 groups side by side
         stats_frame = ttk.Frame(lf)
         stats_frame.grid(row=0, column=0, sticky="ew", pady=(0, 4))
 
         self._stat_vars: dict[str, tk.StringVar] = {}
-        stat_names = [
-            "rreq_tx", "rreq_rx", "rreq_fwd", "rreq_drop",
-            "rrep_tx", "rrep_rx", "rrep_fwd",
-            "data_tx", "data_rx", "data_fwd", "data_drop",
-            "rerr_tx", "rerr_rx",
-            "hello_tx", "hello_rx",
-            "dedupe_drop", "ttl_drop", "rate_drop", "noroute_drop",
+        # (internal_key, display_label) pairs
+        stat_defs = [
+            ("rreq_tx",     "RREQ TX"),  ("rreq_rx",     "RREQ RX"),
+            ("rreq_fwd",    "RREQ fwd"), ("rreq_drop",   "RREQ drop"),
+            ("rrep_tx",     "RREP TX"),  ("rrep_rx",     "RREP RX"),
+            ("rrep_fwd",    "RREP fwd"), ("data_tx",     "Data TX"),
+            ("data_rx",     "Data RX"),  ("data_fwd",    "Data fwd"),
+            ("data_drop",   "Data drop"),("rerr_tx",     "RERR TX"),
+            ("rerr_rx",     "RERR RX"),  ("hello_tx",    "HELLO TX"),
+            ("hello_rx",    "HELLO RX"), ("dedupe_drop", "Dedupe drop"),
+            ("ttl_drop",    "TTL drop"), ("rate_drop",   "Rate drop"),
+            ("noroute_drop","No-route drop"), ("",        ""),
         ]
-        col = 0
-        for i, name in enumerate(stat_names):
-            r, c = divmod(i, 4)
-            var = tk.StringVar(value=f"{name}=0")
-            self._stat_vars[name] = var
-            ttk.Label(stats_frame, textvariable=var, font=("TkFixedFont", 8),
-                      foreground="#aaaaaa").grid(
-                row=r, column=c, sticky="w", padx=(0, 10), pady=1)
+        # Lay out in 2 side-by-side groups of 10 rows (label + value each)
+        for group in range(2):
+            base_col = group * 3  # label, value, gap
+            for row_in_group in range(10):
+                idx = group * 10 + row_in_group
+                if idx >= len(stat_defs):
+                    break
+                key, display = stat_defs[idx]
+                if not key:
+                    continue
+                var = tk.StringVar(value="0")
+                self._stat_vars[key] = var
+                ttk.Label(stats_frame, text=display + ":",
+                          font=("TkFixedFont", 8),
+                          foreground="#888888").grid(
+                    row=row_in_group, column=base_col, sticky="w", padx=(0, 2), pady=1)
+                ttk.Label(stats_frame, textvariable=var,
+                          font=("TkFixedFont", 8, "bold"),
+                          foreground="#aaaaaa", width=4, anchor="e").grid(
+                    row=row_in_group, column=base_col + 1, sticky="e", padx=(0, 12), pady=1)
 
         # Bounded log — height from DisplayConfig (shorter on RPi)
         self._mesh_log = BoundedLog(
@@ -391,7 +415,7 @@ class MeshTab(ttk.Frame):
         stats = self._app.mesh.get_stats()
         for name, var in self._stat_vars.items():
             val = getattr(stats, name, 0)
-            var.set(f"{name}={val}")
+            var.set(str(val))
 
     def _auto_refresh_routes(self) -> None:
         try:

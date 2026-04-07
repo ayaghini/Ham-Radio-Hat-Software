@@ -17,7 +17,7 @@ python3 app/scripts/platform_validation.py
 ## Confirmed So Far
 
 - macOS: compile/import/help/smoke pass recorded; source-run GUI bring-up confirmed
-- macOS item-by-item headless validation (2026-04-04): **44 pass, 0 fail, 7 skip**
+- macOS item-by-item headless validation (2026-04-04, updated 2026-04-06): **48 pass, 0 fail, 5 skip**
   - profile round-trip: SA818, DigiRig, PAKT all pass
   - mode switching: all three hardware-mode profiles confirmed
   - audio enumeration (historical 2026-04-04 snapshot): 3 outputs, 1 input at that point; current source build now preserves duplicate USB codecs as 4 outputs, 2 inputs
@@ -65,6 +65,8 @@ python3 app/scripts/platform_validation.py
 - wheel zoom
 - serial scan
 - audio enumeration and correct USB codec selection when multiple same-name codecs are present
+  - ALSA host-API check: when PipeWire or PulseAudio is running, ALSA `hw:` entries should be suppressed from device list (rank 1 filter); verify TX Output / RX Input show `[PipeWire]` entries, not bare ALSA devices
+  - run `python3 app/scripts/platform_validation.py` — the Linux audio section now reports which audio stacks were detected (ALSA+server / server-only / ALSA-only) to aid diagnosis
 - profile persistence
 - BLE prerequisites/path
 
@@ -85,7 +87,7 @@ python3 app/scripts/platform_validation.py
   - bleak: packed in PyInstaller CArchive; pyobjc CoreBluetooth bindings in Resources: confirmed
   - sv_ttk, PIL, scipy, numpy in bundle: confirmed
   - NSBluetoothAlwaysUsageDescription + NSMicrophoneUsageDescription in Info.plist: confirmed
-  - GUI visual checks (screenshot-confirmed 2026-04-04, historical snapshot): window launches cleanly; Control tab showed Audio Output=LG ULTRAFINE and Audio Input=WH-1000XM4 at that time; serial port /dev/cu.debug-console auto-detected in UI; profile values match disk; status bar shows "Profile saved: last_profile.json" (autosave confirmed); Refresh buttons present
+  - GUI visual checks (screenshot-confirmed 2026-04-04, historical snapshot): window launches cleanly; Control tab showed TX Output=LG ULTRAFINE and RX Input=WH-1000XM4 at that time; Serial Port field showed /dev/cu.debug-console auto-detected in UI; profile values match disk; status bar shows "Profile saved: last_profile.json" (autosave confirmed); ↺ Refresh and ⬡ Auto-ID buttons present
   - Remaining: button-click response verification blocked by macOS 15 Accessibility requirement for CGEvent→Tkinter; BLE dialog needs hardware
 - Linux packaging/deployment exit check — spec + build scripts ready; build not yet run
 - Raspberry Pi deployment verification

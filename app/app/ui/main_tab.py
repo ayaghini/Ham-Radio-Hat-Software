@@ -10,7 +10,7 @@ from tkinter import messagebox, ttk
 
 from ..engine.models import AppProfile
 from ..engine.sa818_client import CTCSS
-from .widgets import BoundedLog, add_row, scrollable_frame
+from .widgets import BoundedLog, Tooltip, add_row, scrollable_frame
 
 if TYPE_CHECKING:
     from ..app import HamHatApp
@@ -36,25 +36,31 @@ class MainTab(ttk.Frame):
     def _build(self) -> None:
         cfg = self._state.display_cfg
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)  # scrollable params fills available space
+        self.rowconfigure(0, weight=1)
+
+        split = ttk.PanedWindow(self, orient="vertical")
+        split.grid(row=0, column=0, sticky="nsew")
 
         # Scrollable params container
-        params_host = ttk.Frame(self)
-        params_host.grid(row=0, column=0, sticky="nsew")
+        params_host = ttk.Frame(split)
         _, _, top = scrollable_frame(params_host)
         self._build_params(top)
 
-        # Log panel at bottom — height from DisplayConfig so RPi gets a
-        # shorter log (fewer lines) that fits within the 720px vertical budget.
-        pad = cfg.compact_padding
-        lf = ttk.LabelFrame(self, text="Radio Log", padding=4)
-        lf.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, pad))
+        # Log panel at bottom — movable via sash so the operator can reclaim
+        # vertical space on the small Pi display when needed.
+        lf = ttk.LabelFrame(split, text="Radio Log", padding=4)
         lf.columnconfigure(0, weight=1)
         lf.rowconfigure(0, weight=1)
         self._log = BoundedLog(lf, height=cfg.log_height_main, wrap="word",
                                 font=(cfg.mono_font, 8), state="disabled",
                                 background="#0f2531", foreground="#9cc4dd")
         self._log.grid(row=0, column=0, sticky="nsew")
+        split.add(params_host, weight=5)
+        split.add(lf, weight=1)
+        try:
+            split.sashpos(0, 500)
+        except Exception:
+            pass
 
     def _build_params(self, parent: ttk.Frame) -> None:
         cfg = self._state.display_cfg
@@ -70,8 +76,8 @@ class MainTab(ttk.Frame):
         conn.columnconfigure(1, weight=1)
         conn.columnconfigure(3, weight=1)
 
-        # uConsole_HAT serial port and hardware mode on one row
-        sa818_port_lbl = ttk.Label(conn, text="uConsole_HAT Serial Port")
+        # Serial port and hardware mode on one row
+        sa818_port_lbl = ttk.Label(conn, text="Serial Port")
         sa818_port_lbl.grid(row=0, column=0, sticky="w", pady=3)
         self.port_combo = ttk.Combobox(conn, textvariable=self._state.port_var, width=22, state="readonly")
         self.port_combo.grid(row=0, column=1, sticky="ew", padx=6, pady=3)
@@ -84,13 +90,17 @@ class MainTab(ttk.Frame):
         )
         hw_combo.grid(row=0, column=3, sticky="w", padx=6, pady=3)
         hw_combo.bind("<<ComboboxSelected>>", self._on_hw_mode_changed)
-        ttk.Label(conn, textvariable=self._state.status_var).grid(row=0, column=4, sticky="e", padx=(12, 0))
+        Tooltip(hw_combo,
+                "uConsole_HAT: SA818 radio module via serial + USB audio.\n"
+                "DigiRig: external transceiver via DigiRig USB codec.\n"
+                "PAKT: BLE mesh device (no local audio).")
 
         # DigiRig PTT port (hidden in SA818 mode)
         dr_port_lbl = ttk.Label(conn, text="DigiRig PTT Port")
         dr_port_lbl.grid(row=1, column=0, sticky="w", pady=3)
         dr_port_entry = ttk.Entry(conn, textvariable=self._state.digirig_port_var, width=22)
         dr_port_entry.grid(row=1, column=1, sticky="ew", padx=6, pady=3)
+        Tooltip(dr_port_entry, "Serial port used to key PTT on the DigiRig (e.g. /dev/ttyUSB0 or COM3).")
         self._digirig_only_widgets += [dr_port_lbl, dr_port_entry]
 
         pakt_dev_lbl = ttk.Label(conn, text="PAKT Device")
@@ -103,47 +113,75 @@ class MainTab(ttk.Frame):
         )
         self._pakt_device_combo.grid(row=1, column=1, sticky="ew", padx=6, pady=3)
         self._pakt_device_combo.bind("<<ComboboxSelected>>", self._on_pakt_device_selected)
+        Tooltip(self._pakt_device_combo,
+                "BLE devices found during Scan. Select one, then press Connect.")
         self._pakt_only_widgets += [pakt_dev_lbl, self._pakt_device_combo]
 
+        # Status bar inside connection frame — own row so it never gets clipped
+        self._status_lbl = ttk.Label(conn, textvariable=self._state.status_var,
+                                     foreground="#9cc4dd", anchor="w")
+        self._status_lbl.grid(row=2, column=0, columnspan=5, sticky="ew",
+                              pady=(4, 0))
+
         btn_row = ttk.Frame(conn)
-        btn_row.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(6, 0))
+        btn_row.grid(row=3, column=0, columnspan=5, sticky="ew", pady=(6, 0))
         for i in range(5):
             btn_row.columnconfigure(i, weight=1)
-        ttk.Button(btn_row, text="Refresh", command=self._state.refresh_ports).grid(row=0, column=0, sticky="ew")
-        self._btn_auto_identify = ttk.Button(btn_row, text="Auto Identify", command=self._state.auto_identify)
+        self._btn_enable_hat = ttk.Button(btn_row, text="⚡ Enable HAT", command=self._state.enable_uconsole_hat)
+        self._btn_enable_hat.grid(row=0, column=0, sticky="ew")
+        Tooltip(self._btn_enable_hat,
+                "Asserts GPIO 23 to power the SA818 module on the uConsole HAT.\n"
+                "Run this once after booting if the radio does not respond.")
+        self._btn_refresh_ports = ttk.Button(btn_row, text="↺ Refresh", command=self._state.refresh_ports)
+        self._btn_refresh_ports.grid(row=0, column=0, sticky="ew")
+        self._btn_auto_identify = ttk.Button(btn_row, text="⬡ Auto-ID", command=self._state.auto_identify)
         self._btn_auto_identify.grid(row=0, column=1, sticky="ew", padx=(6, 0))
-        self._btn_connect = ttk.Button(btn_row, text="Connect", command=self._state.connect)
+        Tooltip(self._btn_auto_identify,
+                "Scan all serial ports and connect to the first SA818 that responds\n"
+                "to AT+DMOCONNECT.")
+        self._btn_connect = ttk.Button(btn_row, text="▶ Connect", command=self._state.connect)
         self._btn_connect.grid(row=0, column=2, sticky="ew", padx=(6, 0))
-        self._btn_disconnect = ttk.Button(btn_row, text="Disconnect", command=self._state.disconnect)
+        self._btn_disconnect = ttk.Button(btn_row, text="■ Disconnect", command=self._state.disconnect)
         self._btn_disconnect.grid(row=0, column=3, sticky="ew", padx=(6, 0))
-        self._btn_read_version = ttk.Button(btn_row, text="Read Version", command=self._state.read_version)
+        self._btn_read_version = ttk.Button(btn_row, text="ℹ Version", command=self._state.read_version)
         self._btn_read_version.grid(row=0, column=4, sticky="ew", padx=(6, 0))
+        Tooltip(self._btn_read_version, "Send AT+VERSION and display the SA818 firmware version string.")
         self._sa818_only_widgets += [self._btn_connect, self._btn_disconnect, self._btn_read_version]
 
-        self._btn_pakt_scan = ttk.Button(btn_row, text="Scan", command=self._state.pakt_scan)
-        self._btn_pakt_connect = ttk.Button(btn_row, text="Connect", command=self._state.pakt_connect_selected)
-        self._btn_pakt_disconnect = ttk.Button(btn_row, text="Disconnect", command=self._state.pakt_disconnect)
+        self._btn_pakt_scan = ttk.Button(btn_row, text="⬡ Scan BLE", command=self._state.pakt_scan)
+        self._btn_pakt_connect = ttk.Button(btn_row, text="▶ Connect", command=self._state.pakt_connect_selected)
+        self._btn_pakt_disconnect = ttk.Button(btn_row, text="■ Disconnect", command=self._state.pakt_disconnect)
         self._btn_pakt_scan.grid(row=0, column=2, sticky="ew", padx=(6, 0))
         self._btn_pakt_connect.grid(row=0, column=3, sticky="ew", padx=(6, 0))
         self._btn_pakt_disconnect.grid(row=0, column=4, sticky="ew", padx=(6, 0))
+        Tooltip(self._btn_pakt_scan, "Scan for nearby PAKT BLE devices (10 s).")
         self._pakt_only_widgets += [self._btn_pakt_scan, self._btn_pakt_connect, self._btn_pakt_disconnect]
 
         # --- Radio params ---
         self._radio_frame = ttk.LabelFrame(parent, text="Radio Parameters (uConsole_HAT)", padding=8)
         self._radio_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(_sp, 0))
         self._radio_frame.columnconfigure(1, weight=1)
-        add_row(self._radio_frame, "Frequency (MHz)", ttk.Entry(self._radio_frame, textvariable=self._state.frequency_var, width=14), 0)
-        add_row(
-            self._radio_frame,
-            "TX Offset (MHz, 0.000 = simplex)",
-            ttk.Entry(self._radio_frame, textvariable=self._state.offset_var, width=14),
-            1,
-        )
-        add_row(self._radio_frame, "Squelch (0-8)", ttk.Entry(self._radio_frame, textvariable=self._state.squelch_var, width=14), 2)
-        bw = ttk.Combobox(self._radio_frame, textvariable=self._state.bandwidth_var, values=["Wide", "Narrow"], width=12, state="readonly")
+        _freq_entry = ttk.Entry(self._radio_frame, textvariable=self._state.frequency_var, width=14)
+        add_row(self._radio_frame, "Frequency (MHz)", _freq_entry, 0)
+        Tooltip(_freq_entry, "VHF: 136–174 MHz  /  UHF: 400–470 MHz")
+        _off_entry = ttk.Entry(self._radio_frame, textvariable=self._state.offset_var, width=14)
+        add_row(self._radio_frame, "TX Offset (MHz)", _off_entry, 1)
+        Tooltip(_off_entry,
+                "Repeater offset added to the RX frequency for TX.\n"
+                "0.000 = simplex (TX and RX on the same frequency).")
+        _sq_entry = ttk.Entry(self._radio_frame, textvariable=self._state.squelch_var, width=14)
+        add_row(self._radio_frame, "Squelch (0–8)", _sq_entry, 2)
+        Tooltip(_sq_entry, "0 = open squelch (always open).  1–8 = increasing threshold.")
+        bw = ttk.Combobox(self._radio_frame, textvariable=self._state.bandwidth_var,
+                          values=["Wide", "Narrow"], width=12, state="readonly")
         add_row(self._radio_frame, "Bandwidth", bw, 3)
-        ttk.Button(self._radio_frame, text="Apply Radio", command=self._state.apply_radio).grid(
-            row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        Tooltip(bw, "Wide = 25 kHz (FM).  Narrow = 12.5 kHz (NFM).")
+        _apply_btn = ttk.Button(self._radio_frame, text="▶ Apply Radio",
+                                command=self._state.apply_radio)
+        _apply_btn.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        Tooltip(_apply_btn,
+                "Send AT+DMOSETGROUP with the current frequency, offset, squelch\n"
+                "and bandwidth to the SA818. Radio must be connected first.")
 
         # DigiRig mode hint (shown instead of radio params)
         self._digirig_hint = ttk.Label(
@@ -215,17 +253,36 @@ class MainTab(ttk.Frame):
         audio.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=(_sp * 2, 0), pady=(_sp, 0))
         audio.columnconfigure(1, weight=1)
         self.out_combo = ttk.Combobox(audio, textvariable=self._state.audio_out_var, width=34, state="readonly")
-        add_row(audio, "Audio Output", self.out_combo, 0)
+        add_row(audio, "TX Output", self.out_combo, 0)
         self.out_combo.bind("<<ComboboxSelected>>", self._on_out_selected)
+        Tooltip(self.out_combo,
+                "Audio output device used to send APRS / audio tones to the radio.\n"
+                "On Linux/RPi, prefer the [PipeWire] or [PulseAudio] entry.")
         self.in_combo = ttk.Combobox(audio, textvariable=self._state.audio_in_var, width=34, state="readonly")
-        add_row(audio, "Audio Input", self.in_combo, 1)
+        add_row(audio, "RX Input", self.in_combo, 1)
         self.in_combo.bind("<<ComboboxSelected>>", self._on_in_selected)
-        ttk.Button(audio, text="Refresh Audio Devices", command=self._state.refresh_audio_devices).grid(
-            row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-        ttk.Button(audio, text="TX Channel Announce Sweep", command=self._state.tx_channel_sweep).grid(
-            row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-        ttk.Button(audio, text="Auto Detect RX by Voice", command=self._state.auto_detect_rx).grid(
-            row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        Tooltip(self.in_combo,
+                "Audio input device used to receive and decode APRS packets from the radio.")
+        _btn_refresh_audio = ttk.Button(
+            audio, text="↺ Refresh Audio Devices",
+            command=self._state.refresh_audio_devices)
+        _btn_refresh_audio.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        Tooltip(_btn_refresh_audio,
+                "Re-enumerate all audio devices. Run after plugging in or unplugging USB audio hardware.")
+        _btn_sweep = ttk.Button(
+            audio, text="▶ Sweep TX Channels",
+            command=self._state.tx_channel_sweep)
+        _btn_sweep.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        Tooltip(_btn_sweep,
+                "Plays a sequence of tones through the TX output and listens on the RX input\n"
+                "to confirm the audio loopback path. Useful when setting up a new radio.")
+        _btn_rx_detect = ttk.Button(
+            audio, text="▶ Auto-Detect RX Input Level",
+            command=self._state.auto_detect_rx)
+        _btn_rx_detect.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        Tooltip(_btn_rx_detect,
+                "Records a short audio sample and suggests the OS microphone gain\n"
+                "level that gives the best APRS decode signal-to-noise ratio.")
         self._shared_audio_frame = audio
 
         # Apply initial visibility based on current mode
@@ -247,6 +304,17 @@ class MainTab(ttk.Frame):
         hw = self._state.hardware_mode_var.get()
         is_digirig = (hw == "DigiRig")
         is_pakt = (hw == "PAKT")
+        is_sa818 = not is_digirig and not is_pakt
+
+        try:
+            if is_sa818:
+                self._btn_refresh_ports.grid_remove()
+                self._btn_enable_hat.grid()
+            else:
+                self._btn_enable_hat.grid_remove()
+                self._btn_refresh_ports.grid()
+        except Exception:
+            pass
 
         # SA818-only widgets: visible in SA818 mode, hidden in DigiRig mode
         for w in self._sa818_only_widgets:

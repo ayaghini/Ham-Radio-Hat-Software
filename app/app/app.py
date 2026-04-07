@@ -1319,24 +1319,30 @@ class HamHatApp(tk.Tk):
         self._set_status("Running TX sweep…")
 
     def ptt_diagnostics(self) -> None:
-        """Cycle through RTS/DTR + active-high/low for 1.5 s each to identify the correct PTT wiring.
+        """Cycle through the configured PTT line with active-high/low for 1.5 s each.
 
-        Results appear in the main log.  Watch the radio/handheld for a carrier during each step.
+        Results appear in the main log. Watch the radio/handheld for a carrier during each step.
+        We intentionally avoid probing the *other* modem-control line because some
+        composite USB radio interfaces can reset or disappear when DTR is exercised.
         """
         if self._hw_mode() not in ("SA818",):
             self._set_status("PTT diagnostics: uConsole_HAT mode only"); return
         if not self.radio.connected:
             self._set_status("PTT diagnostics: radio not connected"); return
 
+        p = self._get_current_profile()
+        line = (p.ptt_line or "RTS").strip().upper()
         combos = [
-            ("RTS", True,  "RTS active-high  (current profile)"),
-            ("RTS", False, "RTS active-low   (inverted)"),
-            ("DTR", True,  "DTR active-high"),
-            ("DTR", False, "DTR active-low   (inverted)"),
+            (line, True,  f"{line} active-high  (configured line)"),
+            (line, False, f"{line} active-low   (configured line, inverted)"),
         ]
 
         def worker():
-            self._evq.put_nowait(_StatusEvt("PTT diagnostics: starting — watch for carrier on radio…"))
+            self._evq.put_nowait(
+                _StatusEvt(
+                    f"PTT diagnostics: starting on {line} only — watch for carrier on radio…"
+                )
+            )
             for line, active_high, label in combos:
                 try:
                     self._evq.put_nowait(_StatusEvt(f"PTT diag: keying {label}"))
@@ -2092,6 +2098,27 @@ class HamHatApp(tk.Tk):
         if ports and not self.port_var.get():
             self.port_var.set(ports[0])
         self._set_status(f"{len(ports)} port(s) found")
+
+    def enable_uconsole_hat(self) -> None:
+        """Run the Pi-side pinctrl enable sequence for the uConsole HAT."""
+        if sys.platform != "linux":
+            self._set_status("Enable is only available on Raspberry Pi / Linux")
+            return
+
+        def worker():
+            try:
+                subprocess.run(["pinctrl", "23", "op"], check=True, capture_output=True, text=True)
+                subprocess.run(["pinctrl", "23", "dh"], check=True, capture_output=True, text=True)
+                self._evq.put_nowait(_StatusEvt("uConsole_HAT enabled"))
+                self.after(150, self.refresh_ports)
+                self.after(300, self.refresh_audio_devices)
+            except FileNotFoundError:
+                self._evq.put_nowait(_ErrorEvt("Enable Error", "pinctrl not found"))
+            except subprocess.CalledProcessError as exc:
+                detail = (exc.stderr or exc.stdout or str(exc)).strip()
+                self._evq.put_nowait(_ErrorEvt("Enable Error", detail))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def auto_identify(self) -> None:
         """Auto-identify SA818 — alias matching MainTab button command."""

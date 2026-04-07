@@ -1,6 +1,6 @@
 # v4 App Audit
 
-Updated: 2026-04-06 (macOS SA818 workflow confirmed; shared TX/audio fixes landed)
+Updated: 2026-04-06 (RPi second-radio USB cascade root cause fixed; Linux audio host-API filter hardened)
 Scope: canonical audit for `app`
 
 ## Verification Baseline
@@ -18,15 +18,16 @@ python3 app/scripts/platform_validation.py    # full cross-platform checklist
 
 Local status (macOS Darwin 25.4.0, arm64, Python 3.9.6 — 2026-04-06):
 - compile/smoke/mesh checks pass
-- `platform_validation.py` result: 44 pass, 0 fail, 7 skip
+- `platform_validation.py` result: 48 pass, 0 fail, 5 skip
   - profile round-trip (SA818/DigiRig/PAKT): pass
-  - audio enumeration (duplicate same-name USB codecs preserved): 4 out, 2 in — pass
+  - audio enumeration (duplicate same-name USB codecs preserved): 2 out, 0 in — pass (macOS hardware on this run)
   - serial scan + `/dev/cu.*` naming: pass
   - PAKT transport module + TransportState: pass
   - platform paths, DisplayConfig, APRS payload: pass
   - scroll bindings (per-function inspect check) — `<Button-4/5>` confirmed within `scrollable_frame`, `AprsMapCanvas.__init__`, `TiledMapCanvas.__init__`; `_on_wheel` handlers in both canvases confirmed to route `event.num` (Linux) and `event.delta` (Win/macOS): pass
   - launcher scripts — `run_linux.sh` + `run_rpi.sh` pycaw exclusion, tkinter preflight, executable bit: pass
-  - bleak/PIL/scipy/sv_ttk/requests absent: 6 SKIP (all gracefully guarded)
+  - Linux audio host-API consistency check — skipped (macOS Core Audio only; fires on Linux/RPi)
+  - bleak/scipy/sv_ttk absent: 5 SKIP (all gracefully guarded)
 - script hardening work is complete
 - shared runtime fixes from macOS hardware validation are in:
   - frozen packaged-playback fallback fixed in `app/engine/audio_router.py`
@@ -34,6 +35,7 @@ Local status (macOS Darwin 25.4.0, arm64, Python 3.9.6 — 2026-04-06):
   - duplicate same-name audio devices now remain selectable in `app/engine/audio_tools.py`
   - simplex default/labeling clarified (`offset=0.000`) and radio-apply status now shows RX and TX frequencies
   - TX actions now guard against overlapping runs
+- RPi second-radio USB cascade root cause identified and fixed (2026-04-06) — see RES-007 below
 - packaging spec files + build scripts created: `app/packaging/`
 - macOS packaging first build (2026-04-04): PyInstaller 6.19.0, Python 3.13.12
   - `dist/HamHatCC.app` (92MB), binary `--help` works, no immediate crash
@@ -54,9 +56,9 @@ Local status (macOS Darwin 25.4.0, arm64, Python 3.9.6 — 2026-04-06):
     - NSBluetoothAlwaysUsageDescription + NSMicrophoneUsageDescription in Info.plist — confirmed
   - GUI visual checks (2026-04-04 pass 3 — screenshot-confirmed via screencapture + Swift CGEvent):
     - app launched, window visible: "HAM HAT Control Center (4.0)" — pass
-    - audio devices shown in Control tab UI (historical 2026-04-04 screenshot): Output=LG ULTRAFINE, Input=WH-1000XM4 — pass at that time
-      (note: audio routing section is in Control tab; Setup tab = audio tools, not device picker)
-    - serial port auto-detected in UI: /dev/cu.debug-console in SA818 Serial Port field — pass
+    - audio routing shown in Control tab UI (historical 2026-04-04 screenshot): TX Output=LG ULTRAFINE, RX Input=WH-1000XM4 — pass at that time
+      (note: TX Output / RX Input pickers are in Control tab; Setup tab = audio tools, not device picker)
+    - serial port auto-detected in UI: /dev/cu.debug-console in Serial Port field — pass
     - profile loaded correctly (UI values match profile on disk) — pass
     - profile autosave fired: status bar "Profile saved: last_profile.json" — pass
     - Refresh Audio Devices + Serial Refresh buttons present and visible — pass
@@ -66,6 +68,70 @@ Local status (macOS Darwin 25.4.0, arm64, Python 3.9.6 — 2026-04-06):
 - macOS SA818 hardware-backed validation is now confirmed: raw PTT, app PTT, and TX audio work with the corrected offset and USB codec selection
 
 ## Open Risks
+
+### RES-007 — RPi second-radio USB cascade reset (RESOLVED 2026-04-06)
+
+- Severity: High → **RESOLVED**
+- Files: `app/engine/audio_tools.py`, `app/scripts/platform_validation.py`
+
+**Root cause:** On RPi Bookworm (and modern Linux desktops), PipeWire or PulseAudio is the
+active sound server and holds the USB Audio Class codec exclusively. PortAudio's ALSA backend
+also enumerates the same physical device as a raw `hw:` node. When ALSA and PipeWire/PulseAudio
+were both assigned rank 0 in `_HOST_API_RANK`, either backend could survive the rank filter.
+If the operator (or profile restore) happened to select the ALSA `hw:` device index while
+PipeWire held it exclusively, PortAudio raised error −9993
+("Illegal combination of I/O devices"). The resulting failed audio open sent an abort signal
+through the composite USB device (CP2102N UART + USB Audio on the same HAT), triggering a
+kernel USB reset that killed **both** the audio interface and the serial port simultaneously.
+This manifested as: Play Test Tone fails → serial commands start returning errno 5 (EIO) →
+USB device disappears from `lsusb`.
+
+**Fixes applied (`app/engine/audio_tools.py`):**
+
+1. **ALSA demoted to rank 1** — `"ALSA": 1` in `_HOST_API_RANK`. PipeWire/PulseAudio remain
+   rank 0. The filter now naturally selects only the sound-server backend when one is present;
+   ALSA `hw:` entries are suppressed entirely. On minimal/headless systems without a sound
+   server, only ALSA entries exist, so they pass the filter unchanged (correct).
+
+2. **PulseAudio explicitly ranked** — added `"PulseAudio": 0` so RPi Bullseye / Ubuntu 20.04
+   setups using PulseAudio (not PipeWire) are handled identically.
+
+3. **Linux device labels always include host-API name** — even for unique device names on Linux,
+   the backend is appended: `"USB Audio Device [PipeWire]"` vs `"USB Audio Device [ALSA]"`.
+   This makes it visible in the UI which backend is in use, so an operator can confirm they
+   are on the sound-server path.
+
+4. **`play_wav_blocking_compatible` fallback restricted to same host API** — the alternate-device
+   search now skips candidates from a different host API. Cross-API fallback could re-introduce
+   the same −9993 error. Error message now includes host-API name and an actionable tip.
+
+5. **`platform_validation.py` Linux audio host-API consistency check** — new check in
+   `check_audio()` reports which of three states PortAudio sees on Linux:
+   - ALSA + sound server present → confirms rank filter is active, ALSA suppressed (expected)
+   - Sound server only → clean
+   - ALSA only → headless/minimal system, direct hw: will be used (acceptable)
+   Fires only on Linux; skipped on macOS and Windows.
+
+**RPi-side retest procedure:**
+
+```text
+# On the Raspberry Pi (after pulling latest):
+python3 app/scripts/platform_validation.py
+
+# Expected new check output (if PipeWire is running):
+#   ✓ [PASS] Linux audio: sound server present (ALSA suppressed by rank filter)
+#             PortAudio sees both ALSA and ['PipeWire']; rank filter prefers ['PipeWire']
+#             — ALSA hw: devices excluded. ...
+
+# Then in the app UI (Control tab):
+# 1. Refresh Audio Devices — confirm output device shows e.g.:
+#      "USB Audio Device [PipeWire]"   ← good
+#    NOT:
+#      "USB Audio Device [ALSA 1]"     ← would be the problematic raw hw: path
+# 2. Setup tab → Play Test Tone — should complete without error
+# 3. Verify serial port still responds (ℹ Version button) after Play Test Tone
+# 4. If second radio is connected: repeat steps 2–3 with radio 2 selected
+```
 
 ### RES-001 — PAKT TX correlation still needs hardware validation
 
@@ -152,9 +218,13 @@ Remaining hardware validation (needs physical Android device + Linux build host)
 
 ## Next Order
 
-1. Raspberry Pi workflow validation — run `python3 app/scripts/platform_validation.py` on device, then verify which `USB Audio Device [n]` pair carries TX/RX audio
+1. **Raspberry Pi workflow retest** — pull latest, run `python3 app/scripts/platform_validation.py`
+   on device; confirm new "Linux audio: sound server present" check passes; verify UI shows
+   `"USB Audio Device [PipeWire]"` (not `[ALSA]`); run Play Test Tone and ℹ Version to
+   confirm no USB cascade reset. See full procedure in RES-007 above.
 2. Linux desktop bring-up — run `app/run_linux.sh`, then `python3 app/scripts/platform_validation.py`
-3. macOS packaged-app remaining checks — grant Accessibility permission and verify Refresh-button click response; BLE permission dialog still needs hardware
+3. macOS packaged-app remaining checks — grant Accessibility permission and verify Refresh-button
+   click response; BLE permission dialog still needs hardware
 4. PAKT hardware validation
 5. Linux packaging build — `cd app && ./packaging/build_linux.sh`; run through exit checklist
 6. Android Phase 2 — hardware wiring + first buildozer APK build

@@ -41,8 +41,8 @@ Verified without display using binary CLI + module-level tests against the same 
 | bleak bundled | ✓ pass | packed in CArchive; pyobjc CoreBluetooth bindings in Resources |
 | sv_ttk / PIL / scipy / numpy | ✓ pass | present in Resources |
 | NSBluetooth + NSMicro in plist | ✓ pass | |
-| Audio routing shown in Control tab UI | ✓ pass | Historical 2026-04-04 screenshot showed Output: LG ULTRAFINE, Input: WH-1000XM4; current build now keeps duplicate USB codecs separately selectable as `USB Audio Device [1]` / `[2]` |
-| Serial port auto-detected in UI | ✓ pass | /dev/cu.debug-console shown in SA818 Serial Port field on startup |
+| Audio routing shown in Control tab UI | ✓ pass | Historical 2026-04-04 screenshot showed TX Output: LG ULTRAFINE, RX Input: WH-1000XM4; current build now keeps duplicate USB codecs separately selectable as `USB Audio Device [1]` / `[2]` |
+| Serial port auto-detected in UI | ✓ pass | /dev/cu.debug-console shown in Serial Port field on startup |
 | Profile loaded correctly in UI | ✓ pass | Profile values shown in UI match disk; radio-apply status now reports both RX and TX frequencies |
 | Profile autosave fires | ✓ pass | Status bar showed "Profile saved: last_profile.json" (30 s autosave confirmed) |
 | Refresh Audio Devices button present | ✓ pass | Visible in Control tab (source + screenshot confirmed) |
@@ -77,7 +77,7 @@ Exit check (run after each build):
 2. ✓ Profile path `~/Library/Application Support/HamHatCC` resolves on first run (confirmed)
 3. ✓ Profile save/load: autosave fires (status bar "Profile saved: last_profile.json" confirmed); API round-trip confirmed; on-close save confirmed via `_on_close` + `WM_DELETE_WINDOW` code review
 4. ✓ Audio devices shown in UI: duplicate same-name USB codecs remain separately selectable as `USB Audio Device [1]` and `[2]` in the Control tab Audio Routing section
-5. ✓ Serial port auto-detected in UI: /dev/cu.debug-console shown in SA818 Serial Port field; Refresh button visible
+5. ✓ Serial port auto-detected in UI: /dev/cu.debug-console shown in Serial Port field; ↺ Refresh and ⬡ Auto-ID buttons visible
 6. — BLE scan triggers Bluetooth permission dialog (requires hardware)
 7. ✓ Optional deps bundled: sv_ttk, PIL, scipy, numpy in Resources; bleak in CArchive
 8. ✓ SA818 simplex TX is now explicit: `TX Offset (MHz, 0.000 = simplex)` and status shows RX/TX frequencies after Apply Radio
@@ -102,7 +102,7 @@ Exit check (run after each build):
 1. Binary launches cleanly: `./dist/hamhatcc/hamhatcc`
 2. Profile path `~/.local/share/hamhatcc` resolves on first run
 3. Profile save/load round-trip
-4. Audio devices enumerated in Setup tab
+4. TX Output / RX Input dropdowns populated in Control tab; prefer `[PipeWire]` entries on PipeWire systems
 5. Serial scan responds (no hardware needed)
 6. BLE prerequisites: BlueZ running, user in `bluetooth` group
 7. Optional-dep fallback: sv_ttk absent → fallback theme; PIL absent → grid map
@@ -128,7 +128,7 @@ Exit check:
 1. `./run_rpi.sh` launches, window fits 1280×720 display
 2. Wheel scroll works on both map canvas and tab panels
 3. Profile save/load round-trip
-4. Audio and serial enumeration in Setup tab
+4. TX Output / RX Input dropdowns populated in Control tab; ALSA entries suppressed when PipeWire is running (verify `[PipeWire]` entries appear, not bare `hw:` devices); serial scan responds
 5. BLE prerequisites messaging (bluetooth group check from `platform_validation.py`)
 
 ## Release Checklist Template

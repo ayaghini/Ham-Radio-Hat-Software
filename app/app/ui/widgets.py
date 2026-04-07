@@ -16,6 +16,63 @@ from tkinter.scrolledtext import ScrolledText
 
 
 # ---------------------------------------------------------------------------
+# Tooltip
+# ---------------------------------------------------------------------------
+
+class Tooltip:
+    """Lightweight delayed tooltip that appears below a widget on hover.
+
+    Usage:
+        Tooltip(some_button, "Explanation of what this does.")
+    """
+
+    _DELAY_MS = 550   # ms to wait before showing
+    _WRAP_PX  = 280   # max tooltip width before text wraps
+
+    def __init__(self, widget: tk.Widget, text: str) -> None:
+        self._widget = widget
+        self._text   = text
+        self._after_id: Optional[str] = None
+        self._win: Optional[tk.Toplevel] = None
+        widget.bind("<Enter>",       self._on_enter, add="+")
+        widget.bind("<Leave>",       self._on_leave, add="+")
+        widget.bind("<ButtonPress>", self._on_leave, add="+")
+
+    def _on_enter(self, _e: tk.Event) -> None:
+        self._cancel()
+        self._after_id = self._widget.after(self._DELAY_MS, self._show)
+
+    def _on_leave(self, _e: tk.Event = None) -> None:
+        self._cancel()
+
+    def _cancel(self) -> None:
+        if self._after_id:
+            self._widget.after_cancel(self._after_id)
+            self._after_id = None
+        if self._win:
+            try:
+                self._win.destroy()
+            except Exception:
+                pass
+            self._win = None
+
+    def _show(self) -> None:
+        self._after_id = None
+        x = self._widget.winfo_rootx() + 16
+        y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
+        self._win = tw = tk.Toplevel(self._widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        lbl = tk.Label(
+            tw, text=self._text, justify="left",
+            background="#ffffe0", relief="solid", borderwidth=1,
+            font=("TkDefaultFont", 8), wraplength=self._WRAP_PX,
+            padx=4, pady=2,
+        )
+        lbl.pack()
+
+
+# ---------------------------------------------------------------------------
 # Row helper
 # ---------------------------------------------------------------------------
 
@@ -25,7 +82,25 @@ def add_row(frame: ttk.Frame, label: str, widget: tk.Widget, row: int) -> None:
 
 
 def scrollable_frame(parent: ttk.Frame) -> tuple[tk.Canvas, ttk.Scrollbar, ttk.Frame]:
-    """Return (canvas, scrollbar, inner_frame) for a scrollable tab."""
+    """Return (canvas, scrollbar, inner_frame) for a scrollable tab.
+
+    Wheel scroll works for ALL widgets inside the panel — Entry, Combobox,
+    Button, Spinbox, Label, Listbox, Treeview, Text — without a recursive
+    widget walk.
+
+    Strategy
+    --------
+    • Direct bindings on ``canvas`` handle the case where the mouse is already
+      inside the panel when the window opens (before the first <Enter> fires).
+    • The outermost ``container`` frame uses <Enter>/<Leave> to activate/
+      deactivate ``bind_all``.  Because <Leave> fires on ``container`` only
+      when the pointer exits the entire scrollable region (not when it moves
+      to a child widget), ``bind_all`` stays active for all descendants.
+    • ``bind_all`` fires at the lowest binding-priority level, so widget-
+      specific handlers (e.g. Text scrolling its own content) still run first.
+    • Windows / macOS: ``<MouseWheel>`` with ``e.delta``
+      Linux:           ``<Button-4>`` (up) / ``<Button-5>`` (down)
+    """
     container = ttk.Frame(parent)
     container.pack(fill="both", expand=True)
     canvas = tk.Canvas(container, highlightthickness=0)
@@ -49,18 +124,40 @@ def scrollable_frame(parent: ttk.Frame) -> tuple[tk.Canvas, ttk.Scrollbar, ttk.F
         if delta:
             canvas.yview_scroll(delta, "units")
 
-    def _on_mousewheel_linux_up(e: tk.Event) -> None:
+    def _on_mousewheel_linux_up(_e: tk.Event) -> None:
         canvas.yview_scroll(-1, "units")
 
-    def _on_mousewheel_linux_down(e: tk.Event) -> None:
+    def _on_mousewheel_linux_down(_e: tk.Event) -> None:
         canvas.yview_scroll(1, "units")
+
+    def _activate(_e: tk.Event = None) -> None:
+        """Forward all wheel events to this canvas via bind_all."""
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        canvas.bind_all("<Button-4>",   _on_mousewheel_linux_up)
+        canvas.bind_all("<Button-5>",   _on_mousewheel_linux_down)
+
+    def _deactivate(_e: tk.Event = None) -> None:
+        """Stop forwarding when the mouse exits the scroll region."""
+        canvas.unbind_all("<MouseWheel>")
+        canvas.unbind_all("<Button-4>")
+        canvas.unbind_all("<Button-5>")
 
     inner.bind("<Configure>", _on_inner_config)
     canvas.bind("<Configure>", _on_canvas_config)
-    # Windows / macOS use <MouseWheel> with e.delta; Linux uses Button-4/5.
+
+    # Direct bindings on the canvas itself (Windows/macOS <MouseWheel>;
+    # Linux <Button-4/5>).  These cover the case where the cursor is already
+    # over the canvas background before the first <Enter> event arrives.
     canvas.bind("<MouseWheel>", _on_mousewheel)
     canvas.bind("<Button-4>",   _on_mousewheel_linux_up)
     canvas.bind("<Button-5>",   _on_mousewheel_linux_down)
+
+    # container-level activate/deactivate: <Leave> only fires when the pointer
+    # exits the entire container boundary, so bind_all stays active while the
+    # cursor is over ANY descendant (Entry, Combobox, Listbox, Treeview …).
+    container.bind("<Enter>", _activate)
+    container.bind("<Leave>", _deactivate)
+
     return canvas, vsb, inner
 
 
@@ -81,12 +178,21 @@ class BoundedLog(ScrolledText):
         if was_disabled:
             self.configure(state="normal")
         self.insert("end", msg + "\n")
-        self.see("end")
-        # Trim if over limit
+        # Trim before scrolling so see("end") lands on the correct final line
         lines = int(self.index("end-1c").split(".")[0])
         if lines > self.MAX_LINES:
             excess = lines - self.MAX_LINES
             self.delete("1.0", f"{excess + 1}.0")
+        self.see("end")
+        if was_disabled:
+            self.configure(state="disabled")
+
+    def clear(self) -> None:
+        """Remove all content from the log."""
+        was_disabled = str(self.cget("state")) == "disabled"
+        if was_disabled:
+            self.configure(state="normal")
+        self.delete("1.0", "end")
         if was_disabled:
             self.configure(state="disabled")
 

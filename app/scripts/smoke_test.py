@@ -248,14 +248,14 @@ def _check_display_config_rpi() -> str:
     r = DisplayConfig.rpi_720p()
 
     assert d.compact_padding == 4, f"default compact_padding wrong: {d.compact_padding}"
-    assert r.compact_padding == 2, f"rpi compact_padding wrong: {r.compact_padding}"
+    assert r.compact_padding == 1, f"rpi compact_padding wrong: {r.compact_padding}"
     assert r.scale == 1.5,         f"rpi scale wrong: {r.scale}"
     assert r.map_height == 120,    f"rpi map_height wrong: {r.map_height}"
-    assert r.log_height_main == 4, f"rpi log_height_main wrong: {r.log_height_main}"
+    assert r.log_height_main == 3, f"rpi log_height_main wrong: {r.log_height_main}"
     assert r.log_height_comms == 6,f"rpi log_height_comms wrong: {r.log_height_comms}"
     assert r.contacts_height == 4, f"rpi contacts_height wrong: {r.contacts_height}"
     assert r.heard_height == 3,    f"rpi heard_height wrong: {r.heard_height}"
-    assert r.geometry == "1280x720+0+0"
+    assert r.geometry == "1280x680+0+28"
 
     # --fullscreen override should clear geometry
     fs = DisplayConfig.from_args(rpi=True, scale=None, geometry=None, fullscreen=True)
@@ -264,7 +264,7 @@ def _check_display_config_rpi() -> str:
 
     return (f"default compact_padding={d.compact_padding}  "
             f"rpi scale={r.scale} map_height={r.map_height} "
-            f"log_main={r.log_height_main} compact_pad={r.compact_padding}")
+            f"log_main={r.log_height_main} compact_pad={r.compact_padding} geometry={r.geometry}")
 
 
 # ---------------------------------------------------------------------------

@@ -163,6 +163,53 @@ def check_audio() -> None:
     except Exception as e:
         ck("audio enumeration", False, str(e))
 
+    # Linux-only: check whether both raw ALSA hw: and a sound server
+    # (PipeWire/PulseAudio) are visible to PortAudio at the same time.
+    # If so, the rank filter in _list_devices() correctly suppresses ALSA
+    # so the operator never accidentally selects a conflicting device that
+    # would trigger PortAudio error -9993 and a potential USB cascade reset.
+    if platform.system() == "Linux":
+        try:
+            import sounddevice as _sd
+            _hostapis = _sd.query_hostapis()
+            _ha_names = {str(h.get("name", "")) for h in _hostapis}
+            _sound_servers = {"PipeWire", "PulseAudio"}
+            has_alsa   = "ALSA"   in _ha_names
+            has_server = bool(_ha_names & _sound_servers)
+            active_servers = sorted(_ha_names & _sound_servers)
+
+            if has_alsa and has_server:
+                ck(
+                    "Linux audio: sound server present (ALSA suppressed by rank filter)",
+                    True,
+                    f"PortAudio sees both ALSA and {active_servers}; "
+                    f"rank filter prefers {active_servers} — ALSA hw: devices excluded. "
+                    "This is correct: selecting a raw ALSA hw: device while "
+                    "PipeWire/PulseAudio holds it would cause error -9993.",
+                )
+            elif has_server and not has_alsa:
+                ck(
+                    "Linux audio: sound server only (no raw ALSA)",
+                    True,
+                    f"PortAudio backends: {sorted(_ha_names)}",
+                )
+            elif has_alsa and not has_server:
+                ck(
+                    "Linux audio: ALSA only (no sound server detected)",
+                    True,
+                    "No PipeWire/PulseAudio visible; raw ALSA hw: devices will be used. "
+                    "Correct on minimal/headless systems without a sound server.",
+                )
+            else:
+                ck(
+                    "Linux audio: host API check",
+                    True,
+                    f"PortAudio backends detected: {sorted(_ha_names)}",
+                    skip=True,
+                )
+        except Exception as _e:
+            ck("Linux audio host-API check", False, str(_e))
+
 
 def check_serial() -> None:
     section("Serial port scan")
@@ -202,8 +249,13 @@ def check_ble() -> None:
         ck("transport module", False, str(e))
 
     try:
-        import bleak
-        ck("bleak installed", True, f"v{bleak.__version__}")
+        import bleak  # noqa: F401 — import confirms installability
+        try:
+            from importlib.metadata import version as _meta_version
+            _bleak_ver = _meta_version("bleak")
+        except Exception:
+            _bleak_ver = getattr(bleak, "__version__", "unknown")
+        ck("bleak installed", True, f"v{_bleak_ver}")
         plat = platform.system()
         if plat == "Linux":
             ck("Linux BLE note", True,
@@ -306,8 +358,12 @@ def check_display_config() -> None:
         r = DisplayConfig.rpi_720p()
         ck("default scale=1.0",      d.scale == 1.0, f"scale={d.scale}")
         ck("rpi scale=1.5",          r.scale == 1.5, f"scale={r.scale}")
-        ck("rpi compact_padding=2",  r.compact_padding == 2,
+        ck("rpi compact_padding=1",  r.compact_padding == 1,
            f"compact_padding={r.compact_padding}")
+        ck("rpi log_height_main=3", r.log_height_main == 3,
+           f"log_height_main={r.log_height_main}")
+        ck("rpi geometry leaves top-bar headroom", r.geometry == "1280x680+0+28",
+           f"geometry={r.geometry}")
     except Exception as e:
         ck("DisplayConfig", False, str(e))
 

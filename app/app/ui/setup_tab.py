@@ -18,7 +18,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import TYPE_CHECKING
 
 from ..engine.sa818_client import CTCSS
-from .widgets import add_row, scrollable_frame
+from .widgets import Tooltip, add_row, scrollable_frame
 
 if TYPE_CHECKING:
     from ..app import HamHatApp
@@ -58,7 +58,7 @@ class SetupTab(ttk.Frame):
 
         row = 0
 
-        # ---- Advanced Radio: Filters ----
+        # ---- Audio Filters ----
         ff = ttk.LabelFrame(inner, text="Audio Filters (uConsole_HAT)", padding=8)
         ff.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
         ff.columnconfigure(0, weight=1)
@@ -68,14 +68,23 @@ class SetupTab(ttk.Frame):
         self._filter_highpass_var = tk.BooleanVar(value=True)
         self._filter_lowpass_var  = tk.BooleanVar(value=True)
 
-        ttk.Checkbutton(ff, text="Disable Pre/De-emphasis",
-                        variable=self._filter_emphasis_var).grid(row=0, column=0, sticky="w")
-        ttk.Checkbutton(ff, text="Disable High-pass Filter",
-                        variable=self._filter_highpass_var).grid(row=1, column=0, sticky="w")
-        ttk.Checkbutton(ff, text="Disable Low-pass Filter",
-                        variable=self._filter_lowpass_var).grid(row=2, column=0, sticky="w")
-        ttk.Button(ff, text="Apply Filters", command=self._apply_filters).grid(
-            row=3, column=0, sticky="w", pady=(6, 0))
+        _cb_emp = ttk.Checkbutton(ff, text="Bypass Pre/De-emphasis",
+                                   variable=self._filter_emphasis_var)
+        _cb_emp.grid(row=0, column=0, sticky="w")
+        Tooltip(_cb_emp,
+                "Checked = SA818 bypasses the built-in pre/de-emphasis filter.\n"
+                "Usually leave checked for APRS (software modulation handles it).")
+        _cb_hp = ttk.Checkbutton(ff, text="Bypass High-pass Filter",
+                                  variable=self._filter_highpass_var)
+        _cb_hp.grid(row=1, column=0, sticky="w")
+        Tooltip(_cb_hp, "Checked = high-pass filter disabled in SA818 hardware.")
+        _cb_lp = ttk.Checkbutton(ff, text="Bypass Low-pass Filter",
+                                  variable=self._filter_lowpass_var)
+        _cb_lp.grid(row=2, column=0, sticky="w")
+        Tooltip(_cb_lp, "Checked = low-pass filter disabled in SA818 hardware.")
+        _apply_filt_btn = ttk.Button(ff, text="Apply Filters", command=self._apply_filters)
+        _apply_filt_btn.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        Tooltip(_apply_filt_btn, "Send AT+SETFILTER to apply the filter configuration to the SA818.")
 
         # ---- Volume ----
         vf = ttk.LabelFrame(inner, text="Volume", padding=8)
@@ -84,13 +93,31 @@ class SetupTab(ttk.Frame):
         row += 1
 
         self._volume_var = tk.IntVar(value=8)
+        _vol_hdr = ttk.Frame(vf)
+        _vol_hdr.grid(row=0, column=0, columnspan=2, sticky="ew")
+        _vol_hdr.columnconfigure(0, weight=1)
+        ttk.Label(_vol_hdr, text="Level:").pack(side="left")
+        self._vol_val_lbl = ttk.Label(_vol_hdr, text="8", width=3, anchor="w",
+                                      foreground="#9cc4dd", font=("TkDefaultFont", 9, "bold"))
+        self._vol_val_lbl.pack(side="left", padx=(4, 0))
+
+        def _on_vol_change(*_):
+            self._vol_val_lbl.configure(text=str(int(self._volume_var.get())))
+
         vol_scale = ttk.Scale(vf, from_=1, to=8, orient="horizontal",
-                              variable=self._volume_var, length=160)
-        vol_scale.grid(row=0, column=0, columnspan=2, sticky="ew")
-        ttk.Label(vf, text="1 (min)").grid(row=1, column=0, sticky="w")
-        ttk.Label(vf, text="8 (max)").grid(row=1, column=1, sticky="e")
-        ttk.Button(vf, text="Set Volume", command=self._set_volume).grid(
-            row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+                              variable=self._volume_var, length=160,
+                              command=lambda v: _on_vol_change())
+        vol_scale.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        _min_max = ttk.Frame(vf)
+        _min_max.grid(row=2, column=0, columnspan=2, sticky="ew")
+        _min_max.columnconfigure(0, weight=1)
+        ttk.Label(_min_max, text="1 (min)", foreground="#888888",
+                  font=("TkDefaultFont", 7)).pack(side="left")
+        ttk.Label(_min_max, text="8 (max)", foreground="#888888",
+                  font=("TkDefaultFont", 7)).pack(side="right")
+        _set_vol_btn = ttk.Button(vf, text="Set Volume", command=self._set_volume)
+        _set_vol_btn.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        Tooltip(_set_vol_btn, "Send AT+DMOSETVOLUME to update the SA818 speaker/headset volume (1–8).")
 
         # ---- CTCSS / DCS ----
         tf = ttk.LabelFrame(inner, text="CTCSS / DCS Tones", padding=8)
@@ -125,11 +152,18 @@ class SetupTab(ttk.Frame):
         # ---- Squelch tail ----
         sf = ttk.LabelFrame(inner, text="Squelch Tail", padding=8)
         sf.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        sf.columnconfigure(0, weight=1)
         row += 1
         self._open_tail_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(sf, text="Open squelch tail (AT+SETTAIL=1)",
-                        variable=self._open_tail_var).pack(anchor="w")
-        ttk.Button(sf, text="Apply Tail", command=self._apply_tail).pack(anchor="w", pady=(4, 0))
+        _tail_cb = ttk.Checkbutton(sf, text="Open squelch tail (AT+SETTAIL=1)",
+                                    variable=self._open_tail_var)
+        _tail_cb.grid(row=0, column=0, sticky="w")
+        Tooltip(_tail_cb,
+                "When checked, the SA818 holds the squelch open briefly after a signal ends.\n"
+                "Useful for receiving full APRS packet tails.")
+        _tail_btn = ttk.Button(sf, text="Apply Tail", command=self._apply_tail)
+        _tail_btn.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        Tooltip(_tail_btn, "Send AT+SETTAIL to apply the squelch tail setting.")
 
         # ---- PTT ----
         # Bind directly to shared vars defined in app.py (same as main_tab.py)
@@ -216,11 +250,18 @@ class SetupTab(ttk.Frame):
         ah.columnconfigure(0, weight=1)
         row += 1
 
-        ttk.Button(ah, text="Auto Find TX/RX Pair",
-                   command=self._app.auto_find_audio_pair).grid(row=0, column=0, sticky="ew")
-        ttk.Checkbutton(ah, text="Auto-select USB audio pair on connect",
-                        variable=self._app.auto_audio_var).grid(
-            row=1, column=0, sticky="w", pady=(6, 0))
+        _pair_btn = ttk.Button(ah, text="⬡ Auto-Find TX/RX Pair",
+                                command=self._app.auto_find_audio_pair)
+        _pair_btn.grid(row=0, column=0, sticky="ew")
+        Tooltip(_pair_btn,
+                "Searches for a USB audio device with both an output (TX) and input (RX)\n"
+                "channel and selects them automatically.")
+        _auto_cb = ttk.Checkbutton(ah, text="Auto-select USB audio pair on connect",
+                                    variable=self._app.auto_audio_var)
+        _auto_cb.grid(row=1, column=0, sticky="w", pady=(6, 0))
+        Tooltip(_auto_cb,
+                "When enabled, the app finds the best USB audio pair every time it\n"
+                "connects to the radio, without requiring a manual selection.")
 
         # ---- Test tone ----
         tf = ttk.LabelFrame(inner, text="Audio Tools — Test Tone", padding=8)
@@ -239,11 +280,19 @@ class SetupTab(ttk.Frame):
                             from_=0.5, to=30.0, increment=0.5, format="%.1f", width=10), row=1)
 
         btn_row = ttk.Frame(tf)
-        btn_row.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
-        ttk.Button(btn_row, text="▶ Play Test Tone",
-                   command=self._play_test_tone).pack(side="left", padx=(0, 4))
-        ttk.Button(btn_row, text="■ Stop Audio",
-                   command=self._stop_audio).pack(side="left")
+        btn_row.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        btn_row.columnconfigure(0, weight=1)
+        btn_row.columnconfigure(1, weight=1)
+        _play_tone_btn = ttk.Button(btn_row, text="▶ Play Test Tone",
+                                     command=self._play_test_tone)
+        _play_tone_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        Tooltip(_play_tone_btn,
+                "Play a sine wave at the specified frequency through the TX output device.\n"
+                "Useful to verify audio routing before transmitting.")
+        _stop_btn = ttk.Button(btn_row, text="■ Stop Audio",
+                                command=self._stop_audio)
+        _stop_btn.grid(row=0, column=1, sticky="ew")
+        Tooltip(_stop_btn, "Stop any audio that is currently playing.")
 
         # ---- Manual APRS packet ----
         mf = ttk.LabelFrame(inner, text="Audio Tools — Manual APRS Packet", padding=8)
@@ -253,67 +302,102 @@ class SetupTab(ttk.Frame):
 
         self._manual_aprs_var = tk.StringVar(value="uConsole HAM HAT test")
         add_row(mf, "Packet text:", ttk.Entry(mf, textvariable=self._manual_aprs_var), row=0)
-
-        ttk.Button(mf, text="▶ Encode & Play (no PTT)",
-                   command=self._play_manual_aprs).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        _enc_btn = ttk.Button(mf, text="▶ Encode & Play (no PTT)",
+                               command=self._play_manual_aprs)
+        _enc_btn.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        Tooltip(_enc_btn,
+                "AFSK-encodes the packet text and plays it through the TX output device.\n"
+                "PTT is NOT asserted — useful to hear what a packet sounds like.")
 
         # ---- Tone sweep / channel detection ----
         sf = ttk.LabelFrame(inner, text="TX Tone Sweep (channel detection)", padding=8)
         sf.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
-        sf.columnconfigure(1, weight=1)
+        sf.columnconfigure(0, weight=1)
         row += 1
 
         ttk.Label(sf, text="Sweeps 1200–2200 Hz to detect RX channel.\nListens for echo on input device.",
                   foreground="#9cc4dd", font=("TkDefaultFont", 8)).grid(
             row=0, column=0, columnspan=2, sticky="w")
-        ttk.Button(sf, text="Run TX Channel Sweep",
-                   command=self._tx_channel_sweep).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        _sweep_btn = ttk.Button(sf, text="▶ Run TX Channel Sweep",
+                                 command=self._tx_channel_sweep)
+        _sweep_btn.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        Tooltip(_sweep_btn,
+                "Plays tones at multiple frequencies through every output device while\n"
+                "recording on the input device. Identifies which output/input pair\n"
+                "forms the correct audio loopback through the radio.")
 
         # ---- PTT Diagnostics ----
         pttd = ttk.LabelFrame(inner, text="PTT Diagnostics", padding=8)
         pttd.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        pttd.columnconfigure(0, weight=1)
         row += 1
         ttk.Label(pttd,
-                  text="Cycles RTS/DTR in both polarities (1.5 s each).\n"
-                       "Watch your handheld for a carrier — note which step keys the radio.\n"
-                       "Results appear in the main status bar. uConsole_HAT mode only.",
+                  text="Tests the configured PTT line (active-high, then active-low) — 1.5 s each.\n"
+                       "Watch your radio for a carrier; note which polarity keys it.\n"
+                       "Only the line set in your Profile is tested. uConsole_HAT mode only.",
                   foreground="#9cc4dd", font=("TkDefaultFont", 8)).grid(
             row=0, column=0, columnspan=2, sticky="w")
-        ttk.Button(pttd, text="▶ Run PTT Diagnostics",
-                   command=self._ptt_diagnostics).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        _ptt_diag_btn = ttk.Button(pttd, text="▶ Run PTT Diagnostics",
+                                    command=self._ptt_diagnostics)
+        _ptt_diag_btn.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        Tooltip(_ptt_diag_btn,
+                "Tests the PTT line configured in your Profile in both polarities\n"
+                "(active-high then active-low, 1.5 s each). The other modem-control\n"
+                "line is not probed — exercising it can reset composite USB radio\n"
+                "interfaces. Watch your radio or a nearby receiver for a carrier.")
 
         # ---- Auto RX detect ----
         arf = ttk.LabelFrame(inner, text="Auto-detect RX Level", padding=8)
         arf.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        arf.columnconfigure(0, weight=1)
         row += 1
 
         ttk.Label(arf, text="Captures audio and suggests OS microphone level\nfor best APRS decode SNR.",
                   foreground="#9cc4dd", font=("TkDefaultFont", 8)).grid(
             row=0, column=0, columnspan=2, sticky="w")
-        ttk.Button(arf, text="Auto-detect RX Level",
-                   command=self._auto_detect_rx).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        _rx_lvl_btn = ttk.Button(arf, text="▶ Auto-detect RX Level",
+                                  command=self._auto_detect_rx)
+        _rx_lvl_btn.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        Tooltip(_rx_lvl_btn,
+                "Records a few seconds of audio from the RX input device and\n"
+                "suggests an OS microphone gain level for optimal APRS decoding.")
 
         # ---- Profile management ----
         pf = ttk.LabelFrame(inner, text="Profile Management", padding=8)
         pf.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        pf.columnconfigure(0, weight=1)
+        pf.columnconfigure(1, weight=1)
+        pf.columnconfigure(2, weight=1)
         row += 1
 
-        p_row = ttk.Frame(pf)
-        p_row.pack(fill="x")
-        ttk.Button(p_row, text="Export Profile…",  command=self._save_profile).pack(side="left", padx=(0, 4))
-        ttk.Button(p_row, text="Import Profile…",  command=self._load_profile).pack(side="left", padx=4)
-        ttk.Button(p_row, text="Reset Defaults",   command=self._reset_defaults).pack(side="left", padx=4)
+        _exp_btn = ttk.Button(pf, text="⬆ Export…", command=self._save_profile)
+        _exp_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        Tooltip(_exp_btn, "Save the current profile to a JSON file of your choice.")
+        _imp_btn = ttk.Button(pf, text="⬇ Import…", command=self._load_profile)
+        _imp_btn.grid(row=0, column=1, sticky="ew", padx=4)
+        Tooltip(_imp_btn, "Load a previously exported profile JSON file.")
+        _rst_btn = ttk.Button(pf, text="↺ Reset Defaults", command=self._reset_defaults)
+        _rst_btn.grid(row=0, column=2, sticky="ew", padx=(4, 0))
+        Tooltip(_rst_btn, "Reset ALL settings to factory defaults. Cannot be undone.")
 
         # ---- Bootstrap ----
         bf = ttk.LabelFrame(inner, text="Bootstrap / Diagnostics", padding=8)
         bf.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        bf.columnconfigure(0, weight=1)
         row += 1
 
-        ttk.Button(bf, text="Install / Update Dependencies",
-                   command=self._bootstrap).grid(row=0, column=0, sticky="w")
-        ttk.Button(bf, text="Run Two-Radio Diagnostic",
-                   command=self._two_radio_diagnostic).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        _boot_btn = ttk.Button(bf, text="Install / Update Dependencies",
+                                command=self._bootstrap)
+        _boot_btn.grid(row=0, column=0, sticky="ew")
+        Tooltip(_boot_btn,
+                "Runs pip to install or update sounddevice, pyserial, numpy and other\n"
+                "required packages. Safe to run at any time.")
+        _diag_btn = ttk.Button(bf, text="Run Two-Radio Diagnostic",
+                                command=self._two_radio_diagnostic)
+        _diag_btn.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        Tooltip(_diag_btn,
+                "Cycles through both connected radios and verifies audio routing.\n"
+                "Useful when two HAT radios are attached to the same system.")
 
         # ---- TTS / Speech (Windows only) ----
         # Only shown on Windows — the backend uses PowerShell SpeechSynthesizer
@@ -412,7 +496,12 @@ class SetupTab(ttk.Frame):
         self._filter_emphasis_var.set(getattr(p, "disable_emphasis", True))
         self._filter_highpass_var.set(getattr(p, "disable_highpass", True))
         self._filter_lowpass_var.set(getattr(p, "disable_lowpass", True))
-        self._volume_var.set(int(getattr(p, "volume", 8)))
+        vol = int(getattr(p, "volume", 8))
+        self._volume_var.set(vol)
+        try:
+            self._vol_val_lbl.configure(text=str(vol))
+        except Exception:
+            pass
 
         self._ctcss_tx_var.set(getattr(p, "ctcss_tx", "") or "None")
         self._ctcss_rx_var.set(getattr(p, "ctcss_rx", "") or "None")
