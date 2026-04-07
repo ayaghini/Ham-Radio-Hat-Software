@@ -1,8 +1,8 @@
 # Cross-Platform v4 Roadmap
 
-Status date: 2026-04-05
+Status date: 2026-04-06
 Target app: `app`
-Program status: cross-platform prep is in place; macOS validation is farthest along; Linux desktop, Raspberry Pi workflow validation, and hardware-backed BLE still remain
+Program status: cross-platform prep is in place; macOS SA818 workflow is now confirmed on real hardware; Raspberry Pi workflow validation is next; Linux desktop and hardware-backed BLE still remain
 
 ## Done
 
@@ -16,7 +16,7 @@ Program status: cross-platform prep is in place; macOS validation is farthest al
 ## Confirmed Runtime State
 
 - Windows: baseline platform
-- macOS: source-run bring-up confirmed; packaged-app checks substantially complete
+- macOS: source-run bring-up confirmed; packaged-app checks substantially complete; SA818 TX/PTT/audio workflow confirmed after offset/audio-device fixes
 - Raspberry Pi: source-run bring-up confirmed with `--rpi`
 - Linux desktop: not yet validated in a real session
 - Android: Phase 1 implementation complete; `app/android/` ready for `buildozer android debug` build
@@ -25,8 +25,8 @@ Program status: cross-platform prep is in place; macOS validation is farthest al
 
 ### Validation
 
-- Linux desktop bring-up
 - Raspberry Pi item-by-item workflow validation
+- Linux desktop bring-up
 - macOS packaged-app interaction checks requiring Accessibility permission or hardware
 
 ### Hardware
@@ -57,8 +57,8 @@ Program status: cross-platform prep is in place; macOS validation is farthest al
 
 ## Immediate Next
 
-1. Run Linux desktop GUI bring-up with `app/run_linux.sh`
-2. Run item-by-item Raspberry Pi validation with `app/run_rpi.sh`
+1. Run item-by-item Raspberry Pi validation with `app/run_rpi.sh`
+2. Run Linux desktop GUI bring-up with `app/run_linux.sh`
 3. Finish macOS packaged-app interaction checks after granting Accessibility permission; verify BLE dialog when hardware is available
 4. Validate PAKT BLE on hardware
 5. Run Linux packaging build/exit checks

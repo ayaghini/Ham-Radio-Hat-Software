@@ -1,19 +1,19 @@
 # Cross-Platform v4 Support Matrix
 
-Last updated: 2026-04-05 (Android Phase 1 implementation complete)
+Last updated: 2026-04-06 (macOS SA818 workflow confirmed; duplicate USB-audio fix landed)
 
 ## Desktop/Embedded Platform Status
 
 | Capability | Windows | macOS | Linux | Raspberry Pi | Notes |
 |---|---|---|---|---|---|
 | Startup from source | baseline | confirmed | pending | confirmed | Linux desktop still needs first real run |
-| Profile persistence | baseline | confirmed | pending | pending | macOS SA818/DigiRig/PAKT round-trips confirmed 2026-04-04 |
-| Audio enumeration | baseline | confirmed | pending | pending | macOS: 3 outputs, 1 input confirmed 2026-04-04 |
+| Profile persistence | baseline | confirmed | pending | pending | macOS SA818/DigiRig/PAKT round-trips confirmed |
+| Audio enumeration | baseline | confirmed | pending | pending | macOS duplicate same-name USB codecs now preserved: 4 outputs, 2 inputs (`USB Audio Device [1]/[2]`) |
 | Serial scan | baseline | confirmed | likely-ok | likely-ok | macOS `/dev/cu.*` naming confirmed; no hardware ports present |
-| Serial workflows | baseline | likely-ok | likely-ok | likely-ok | real-device validation still needed |
+| Serial workflows | baseline | confirmed | likely-ok | likely-ok | macOS SA818 connect/apply/PTT/TX workflow confirmed on real hardware |
 | DigiRig workflows | baseline | likely-ok | likely-ok | likely-ok | real-device validation still needed |
 | PAKT BLE | baseline | needs hardware | needs hardware | needs hardware | transport module loads on macOS; live scan/permission dialog needs hardware |
-| Packaging path | baseline | exit-checks-substantial | spec-ready | venv-install | macOS: exit checks substantially complete 2026-04-04 (launch, profile autosave, audio+serial visible in UI, bundle contents); button-click verification needs Accessibility permission; BLE dialog needs hardware; Linux: spec+build scripts ready, build not yet run |
+| Packaging path | baseline | exit-checks-substantial | spec-ready | venv-install | macOS: exit checks substantially complete, plus shared fixes for frozen playback, TX offset clarity, and duplicate USB codec selection; button-click verification still needs Accessibility permission; BLE dialog needs hardware |
 
 ## Android Platform Status
 

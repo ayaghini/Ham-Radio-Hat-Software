@@ -193,7 +193,7 @@ class MeshStats:
 class AppProfile:
     # Radio
     frequency: float = 145.070
-    offset: float = 0.6
+    offset: float = 0.0
     squelch: int = 4
     bandwidth: str = "Wide"
     ctcss_tx: str = ""

@@ -101,6 +101,7 @@ def main() -> int:
 
     try:
         import sounddevice as sd
+        from app.engine.audio_tools import play_wav_blocking_compatible
 
         # Validate device before spending time loading the WAV.
         try:
@@ -108,6 +109,16 @@ def main() -> int:
         except ValueError as exc:
             print(f"[play_wav_worker] {exc}", file=sys.stderr)
             return 1
+
+        with wave.open(str(wav_path), "rb") as wf:
+            sampwidth = wf.getsampwidth()
+
+        # The app-generated APRS/test-tone WAVs are 16-bit PCM, and using the same
+        # compatible playback path as the main engine gives better results on devices
+        # that need sample-rate/channel adaptation.
+        if sampwidth == 2:
+            play_wav_blocking_compatible(wav_path, device_index=int(args.output_device))
+            return 0
 
         data_f, rate = _load_wav_float32(wav_path)
         sd.play(data_f, samplerate=rate, device=int(args.output_device), blocking=True)

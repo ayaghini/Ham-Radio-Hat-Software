@@ -81,8 +81,9 @@ Fixed three issues found during a broad v4 audit (see `audit_v4.md`):
 - **AUD-002** `_conn_lbl` was not reset when the Hardware Mode combobox changed modes. Fixed:
   `MainTab._on_hw_mode_changed` now calls `app.on_hw_mode_changed()` which resets the indicator
   to "⚫ Disconnected", preventing SA818 "🟢 COM3" from persisting into PAKT mode.
-- **AUD-003** `scripts/generate_agent_onboarding_pack.py` had `"agent_bootstap"` typo (missing
-  'r') in 3 places. Fixed: all occurrences corrected to `"agent_bootstrap"`.
+- **AUD-003** `scripts/generate_agent_onboarding_pack.py` path drifted from the repo's historical
+  `agent_bootstap/` folder name. Fixed: the generator now writes to the canonical
+  `agent_bootstap/` path consistently.
 
 ### Third fix pass (2026-03-16)
 

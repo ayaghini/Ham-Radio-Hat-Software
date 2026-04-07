@@ -1,6 +1,6 @@
 # APRS Tab (`AprsTab`) - Legacy Note
 
-There is no standalone APRS notebook tab in `ham_hat_control_center_v4`.
+There is no standalone APRS notebook tab in the active `app/` build.
 
 APRS controls were merged into:
 - `APRS Comms` tab for RX monitor, map, contacts/groups, intro/position TX, messaging, and APRS logs.

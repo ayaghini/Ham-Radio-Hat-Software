@@ -2,7 +2,7 @@
 
 ## Host app current shape
 
-`ham_hat_control_center_v4` is a Tkinter app with a main-thread UI and worker-thread engine callbacks marshaled through a queue. It already supports two hardware modes:
+The active `app/` build is a Tkinter app with a main-thread UI and worker-thread engine callbacks marshaled through a queue. It already supports two hardware modes:
 
 - `SA818`
 - `DigiRig`

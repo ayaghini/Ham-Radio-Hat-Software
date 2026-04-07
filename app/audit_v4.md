@@ -1,6 +1,6 @@
 # v4 App Audit
 
-Updated: 2026-04-05 (macOS packaged-app substantial pass)
+Updated: 2026-04-06 (macOS SA818 workflow confirmed; shared TX/audio fixes landed)
 Scope: canonical audit for `app`
 
 ## Verification Baseline
@@ -16,11 +16,11 @@ python3 app/scripts/mesh_sim_tests.py
 python3 app/scripts/platform_validation.py    # full cross-platform checklist
 ```
 
-Local status (macOS Darwin 25.4.0, arm64, Python 3.9.6 — 2026-04-05):
+Local status (macOS Darwin 25.4.0, arm64, Python 3.9.6 — 2026-04-06):
 - compile/smoke/mesh checks pass
 - `platform_validation.py` result: 44 pass, 0 fail, 7 skip
   - profile round-trip (SA818/DigiRig/PAKT): pass
-  - audio enumeration (3 out, 1 in): pass
+  - audio enumeration (duplicate same-name USB codecs preserved): 4 out, 2 in — pass
   - serial scan + `/dev/cu.*` naming: pass
   - PAKT transport module + TransportState: pass
   - platform paths, DisplayConfig, APRS payload: pass
@@ -28,6 +28,12 @@ Local status (macOS Darwin 25.4.0, arm64, Python 3.9.6 — 2026-04-05):
   - launcher scripts — `run_linux.sh` + `run_rpi.sh` pycaw exclusion, tkinter preflight, executable bit: pass
   - bleak/PIL/scipy/sv_ttk/requests absent: 6 SKIP (all gracefully guarded)
 - script hardening work is complete
+- shared runtime fixes from macOS hardware validation are in:
+  - frozen packaged-playback fallback fixed in `app/engine/audio_router.py`
+  - TX worker playback aligned with compatible path in `scripts/play_wav_worker.py` and `scripts/tx_wav_worker.py`
+  - duplicate same-name audio devices now remain selectable in `app/engine/audio_tools.py`
+  - simplex default/labeling clarified (`offset=0.000`) and radio-apply status now shows RX and TX frequencies
+  - TX actions now guard against overlapping runs
 - packaging spec files + build scripts created: `app/packaging/`
 - macOS packaging first build (2026-04-04): PyInstaller 6.19.0, Python 3.13.12
   - `dist/HamHatCC.app` (92MB), binary `--help` works, no immediate crash
@@ -41,14 +47,14 @@ Local status (macOS Darwin 25.4.0, arm64, Python 3.9.6 — 2026-04-05):
     - no-crash launch: app runs 6+ seconds, no exit — pass
     - profile path `~/Library/Application Support/HamHatCC/profiles/` resolves — pass
     - profile save/load round-trip: AppProfile loaded, mutated, saved, reloaded, field verified — pass
-    - audio enumeration (via bundled sounddevice): 3 out (LG ULTRAFINE, Mac mini Speakers, WH-1000XM4), 1 in — pass
+    - audio enumeration (via bundled sounddevice, historical 2026-04-04 snapshot): 3 out, 1 in — pass at that time; current source build now preserves duplicate USB codecs as 4 out, 2 in
     - serial scan (via bundled pyserial): executed, `/dev/cu.*` ports returned — pass
     - bleak bundled: packed in PyInstaller CArchive; pyobjc CoreBluetooth bindings in Resources — confirmed
     - sv_ttk, PIL, scipy, numpy visible in Resources — confirmed
     - NSBluetoothAlwaysUsageDescription + NSMicrophoneUsageDescription in Info.plist — confirmed
   - GUI visual checks (2026-04-04 pass 3 — screenshot-confirmed via screencapture + Swift CGEvent):
     - app launched, window visible: "HAM HAT Control Center (4.0)" — pass
-    - audio devices shown in Control tab UI: Output=LG ULTRAFINE, Input=WH-1000XM4 — pass
+    - audio devices shown in Control tab UI (historical 2026-04-04 screenshot): Output=LG ULTRAFINE, Input=WH-1000XM4 — pass at that time
       (note: audio routing section is in Control tab; Setup tab = audio tools, not device picker)
     - serial port auto-detected in UI: /dev/cu.debug-console in SA818 Serial Port field — pass
     - profile loaded correctly (UI values match profile on disk) — pass
@@ -57,7 +63,7 @@ Local status (macOS Darwin 25.4.0, arm64, Python 3.9.6 — 2026-04-05):
   - Still needing human operator run or permission:
     - button-click response (Refresh buttons etc.): CGEvent injection blocked by macOS 15 Accessibility requirement for Tkinter apps; requires Accessibility permission grant or manual operator verification
     - BLE permission dialog on PAKT scan: needs hardware + Bluetooth
-- no hardware-backed validation was performed locally
+- macOS SA818 hardware-backed validation is now confirmed: raw PTT, app PTT, and TX audio work with the corrected offset and USB codec selection
 
 ## Open Risks
 
@@ -146,8 +152,8 @@ Remaining hardware validation (needs physical Android device + Linux build host)
 
 ## Next Order
 
-1. Linux desktop bring-up — run `app/run_linux.sh`, then `python3 app/scripts/platform_validation.py`
-2. Raspberry Pi workflow validation — run `python3 app/scripts/platform_validation.py` on device
+1. Raspberry Pi workflow validation — run `python3 app/scripts/platform_validation.py` on device, then verify which `USB Audio Device [n]` pair carries TX/RX audio
+2. Linux desktop bring-up — run `app/run_linux.sh`, then `python3 app/scripts/platform_validation.py`
 3. macOS packaged-app remaining checks — grant Accessibility permission and verify Refresh-button click response; BLE permission dialog still needs hardware
 4. PAKT hardware validation
 5. Linux packaging build — `cd app && ./packaging/build_linux.sh`; run through exit checklist

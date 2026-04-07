@@ -7,10 +7,10 @@ Status keys: `todo`, `in_progress`, `done`
 | ID | Status | Task | Exit Check |
 |---|---|---|---|
 | CP-512 | todo | Linux desktop bring-up | `app/run_linux.sh` launches cleanly; then run `python3 app/scripts/platform_validation.py` |
-| CP-520 | in_progress | macOS workflow validation | source-run validation is substantially complete; BLE permission flow still needs hardware |
-| CP-521 | todo | Raspberry Pi workflow validation | wheel zoom, serial, audio, profile save/load, BLE prerequisites; run `platform_validation.py` |
+| CP-520 | in_progress | macOS workflow validation | SA818 serial/PTT/TX-audio workflow now confirmed after offset and duplicate-USB-device fixes; BLE permission flow still needs hardware |
+| CP-521 | in_progress | Raspberry Pi workflow validation | next operator pass: wheel zoom, serial, audio pair selection, profile save/load, BLE prerequisites; run `platform_validation.py` |
 | CP-530 | todo | PAKT hardware validation | real BLE scan/connect/TX result behavior verified |
-| CP-540 | in_progress | macOS packaging verification | exit checks substantially complete (2026-04-04): launch/no-crash, profile autosave (status bar confirmed), audio devices visible in UI (Output: LG ULTRAFINE, Input: WH-1000XM4 in Control tab), serial port auto-detected in UI (/dev/cu.debug-console), bundle contents confirmed, plist permissions present; remaining: button-click verification (blocked by macOS 15 Accessibility requirement) and BLE dialog (needs hardware) |
+| CP-540 | in_progress | macOS packaging verification | exit checks substantially complete; SA818 TX/PTT/audio workflow now works after shared offset/audio-enumeration fixes; remaining: button-click verification (blocked by macOS 15 Accessibility requirement) and BLE dialog (needs hardware) |
 | CP-541 | todo | Linux packaging verification | spec + build script ready (`app/packaging/`); first real Linux build still needs to be run |
 | CP-542 | todo | Raspberry Pi deployment verification | venv install + autostart flow verified on device |
 | CP-600A | done | Android expansion — Phase 1 implementation | `app/android/` directory created with full Kivy/KivyMD app; all 4 screens + HAL layer + buildozer spec; engine imports verified; smoke test passed 2026-04-05 |

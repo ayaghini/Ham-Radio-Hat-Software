@@ -1,6 +1,6 @@
 # Cross-Platform v4 Packaging and Release Plan
 
-Updated: 2026-04-05 (macOS packaged-app substantial pass)
+Updated: 2026-04-06 (macOS SA818 workflow confirmed; shared audio-device fix landed)
 
 ## Goal
 
@@ -11,7 +11,7 @@ Define a native-feeling release path for each target platform without fragmentin
 | Platform | Format | Artifacts | Status |
 |---|---|---|---|
 | Windows | PyInstaller one-file exe | (existing baseline) | baseline |
-| macOS | PyInstaller `.app` bundle | `app/packaging/app_mac.spec`, `build_mac.sh` | **substantial pass 2026-04-04** — launch/no-crash, profile path + save/load, audio + serial checks, bundle contents, and GUI-visible state confirmed; button-click verification and BLE dialog still need Accessibility permission or hardware |
+| macOS | PyInstaller `.app` bundle | `app/packaging/app_mac.spec`, `build_mac.sh` | **substantial pass 2026-04-06** — launch/no-crash, profile path + save/load, serial/PTT/TX audio confirmed; duplicate same-name USB codecs now stay distinct; button-click verification and BLE dialog still need Accessibility permission or hardware |
 | Linux desktop | PyInstaller one-folder bundle | `app/packaging/app_linux.spec`, `build_linux.sh` | spec ready, build not yet run |
 | Raspberry Pi | Source install via `run_rpi.sh` (venv) | `run_rpi.sh` | launcher in place |
 
@@ -36,14 +36,14 @@ Verified without display using binary CLI + module-level tests against the same 
 | No-crash launch (6 s) | ✓ pass | |
 | Profile path resolves | ✓ pass | `~/Library/Application Support/HamHatCC/profiles/` |
 | Profile save/load round-trip | ✓ pass | AppProfile mutated, saved, reloaded, field verified |
-| Audio enumeration | ✓ pass | 3 out (LG ULTRAFINE, Mac mini Speakers, WH-1000XM4), 1 in |
+| Audio enumeration | ✓ pass | source build now confirms 4 out, 2 in with duplicate USB codecs preserved as `USB Audio Device [1]` / `[2]` |
 | Serial scan | ✓ pass | pyserial executes; `/dev/cu.*` ports returned |
 | bleak bundled | ✓ pass | packed in CArchive; pyobjc CoreBluetooth bindings in Resources |
 | sv_ttk / PIL / scipy / numpy | ✓ pass | present in Resources |
 | NSBluetooth + NSMicro in plist | ✓ pass | |
-| Audio routing shown in Control tab UI | ✓ pass | Output: LG ULTRAFINE, Input: WH-1000XM4 visible (audio routing is in Control tab, not Setup; Setup tab contains audio tools — test tone, packet TX, sweep) |
+| Audio routing shown in Control tab UI | ✓ pass | Historical 2026-04-04 screenshot showed Output: LG ULTRAFINE, Input: WH-1000XM4; current build now keeps duplicate USB codecs separately selectable as `USB Audio Device [1]` / `[2]` |
 | Serial port auto-detected in UI | ✓ pass | /dev/cu.debug-console shown in SA818 Serial Port field on startup |
-| Profile loaded correctly in UI | ✓ pass | Values match profile on disk (145.07 MHz, offset 0.6, squelch 4) |
+| Profile loaded correctly in UI | ✓ pass | Profile values shown in UI match disk; radio-apply status now reports both RX and TX frequencies |
 | Profile autosave fires | ✓ pass | Status bar showed "Profile saved: last_profile.json" (30 s autosave confirmed) |
 | Refresh Audio Devices button present | ✓ pass | Visible in Control tab (source + screenshot confirmed) |
 | Serial Refresh button present | ✓ pass | Visible in Control tab (screenshot confirmed) |
@@ -76,10 +76,11 @@ Exit check (run after each build):
 1. ✓ App launches cleanly (confirmed 2026-04-04)
 2. ✓ Profile path `~/Library/Application Support/HamHatCC` resolves on first run (confirmed)
 3. ✓ Profile save/load: autosave fires (status bar "Profile saved: last_profile.json" confirmed); API round-trip confirmed; on-close save confirmed via `_on_close` + `WM_DELETE_WINDOW` code review
-4. ✓ Audio devices shown in UI: Output = LG ULTRAFINE, Input = WH-1000XM4 visible in Control tab Audio Routing section (note: audio routing is Control tab, not Setup tab; Setup tab = audio tools)
+4. ✓ Audio devices shown in UI: duplicate same-name USB codecs remain separately selectable as `USB Audio Device [1]` and `[2]` in the Control tab Audio Routing section
 5. ✓ Serial port auto-detected in UI: /dev/cu.debug-console shown in SA818 Serial Port field; Refresh button visible
 6. — BLE scan triggers Bluetooth permission dialog (requires hardware)
 7. ✓ Optional deps bundled: sv_ttk, PIL, scipy, numpy in Resources; bleak in CArchive
+8. ✓ SA818 simplex TX is now explicit: `TX Offset (MHz, 0.000 = simplex)` and status shows RX/TX frequencies after Apply Radio
 Note: Button-click automation blocked by macOS 15 Accessibility permission requirement for CGEvent injection into Tkinter. Refresh/scan button click response and tab navigation need human operator verification.
 
 ## Linux Desktop

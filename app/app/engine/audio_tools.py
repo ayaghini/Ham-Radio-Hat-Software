@@ -85,14 +85,7 @@ def _list_devices(direction: str) -> list[tuple[int, str]]:
 
     ranked.sort(key=lambda x: (x[0], x[1]))
 
-    # De-duplicate by normalised name, preferring the lowest rank (WASAPI first)
-    chosen: dict[str, tuple[int, int, str, str]] = {}
-    for item in ranked:
-        key = item[2].strip().lower()
-        if key not in chosen:
-            chosen[key] = item
-
-    out = list(chosen.values())
+    out = list(ranked)
     # Further filter: if WASAPI entries exist, drop MME duplicates of the same name
     if any(x[0] == 0 for x in out):
         out = [x for x in out if x[0] == 0]
@@ -101,8 +94,24 @@ def _list_devices(direction: str) -> list[tuple[int, str]]:
 
     # Remove generic Sound Mapper entries
     out = [x for x in out if "sound mapper" not in x[2].strip().lower()]
-    out.sort(key=lambda x: x[2].lower())
-    return [(idx, name) for _, idx, name, _ in out]
+    out.sort(key=lambda x: (x[2].lower(), x[1]))
+
+    name_counts: dict[str, int] = {}
+    for _, _, name, _ in out:
+        key = name.strip().lower()
+        name_counts[key] = name_counts.get(key, 0) + 1
+
+    labelled: list[tuple[int, str]] = []
+    seen_counts: dict[str, int] = {}
+    for _, idx, name, _ in out:
+        key = name.strip().lower()
+        if name_counts[key] > 1:
+            seen_counts[key] = seen_counts.get(key, 0) + 1
+            label = f"{name} [{seen_counts[key]}]"
+        else:
+            label = name
+        labelled.append((idx, label))
+    return labelled
 
 
 def list_output_devices() -> list[tuple[int, str]]:

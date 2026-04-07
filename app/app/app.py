@@ -889,8 +889,9 @@ class HamHatApp(tk.Tk):
                 self.radio.apply_config(cfg)
                 self.radio.set_filters(p.disable_emphasis, p.disable_highpass, p.disable_lowpass)
                 self.radio.set_volume(p.volume)
+                tx_freq = p.frequency + p.offset
                 self._evq.put_nowait(_StatusEvt(
-                    f"Radio applied: {p.frequency:.4f} MHz  squelch={p.squelch}  vol={p.volume}"))
+                    f"Radio applied: RX {p.frequency:.4f} MHz  TX {tx_freq:.4f} MHz  squelch={p.squelch}  vol={p.volume}"))
             except SA818Error as exc:
                 self._evq.put_nowait(_ErrorEvt("Radio Error", str(exc)))
             except Exception as exc:
@@ -1188,6 +1189,9 @@ class HamHatApp(tk.Tk):
     # -----------------------------------------------------------------------
 
     def play_test_tone(self, freq: float = 1200.0, duration: float = 2.0) -> None:
+        if self.audio.tx_active:
+            self._set_status("TX already in progress")
+            return
         out_dev = getattr(self, "_output_dev_idx", None)
         if out_dev is None:
             out_dev = self._resolve_output_dev_fallback()
@@ -1209,6 +1213,9 @@ class HamHatApp(tk.Tk):
             self._set_status(f"Test tone: {freq:.0f} Hz  {duration:.1f}s → device {out_dev}")
 
     def play_manual_aprs_packet(self, text: str) -> None:
+        if self.audio.tx_active:
+            self._set_status("TX already in progress")
+            return
         if self._hw_mode() == "PAKT":
             self._set_status("Manual APRS audio generation is not applicable in PAKT mode")
             return
@@ -1241,6 +1248,9 @@ class HamHatApp(tk.Tk):
 
     def tx_channel_sweep(self) -> None:
         """Run TX channel sweep to help find the correct audio routing."""
+        if self.audio.tx_active:
+            self._set_status("TX already in progress")
+            return
         out_dev = getattr(self, "_output_dev_idx", None)
         if out_dev is None:
             out_dev = self._resolve_output_dev_fallback()
@@ -1659,9 +1669,21 @@ class HamHatApp(tk.Tk):
             if p.output_device_name in outs:
                 self._output_dev_idx  = outs[p.output_device_name]
                 self._output_dev_name = p.output_device_name
+            else:
+                for name, idx in outs.items():
+                    if name == p.output_device_name or name.startswith(f"{p.output_device_name} ["):
+                        self._output_dev_idx = idx
+                        self._output_dev_name = name
+                        break
             if p.input_device_name in ins:
                 self._input_dev_idx  = ins[p.input_device_name]
                 self._input_dev_name = p.input_device_name
+            else:
+                for name, idx in ins.items():
+                    if name == p.input_device_name or name.startswith(f"{p.input_device_name} ["):
+                        self._input_dev_idx = idx
+                        self._input_dev_name = name
+                        break
         except Exception:
             pass
 

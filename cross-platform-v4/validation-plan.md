@@ -20,7 +20,7 @@ python3 app/scripts/platform_validation.py
 - macOS item-by-item headless validation (2026-04-04): **44 pass, 0 fail, 7 skip**
   - profile round-trip: SA818, DigiRig, PAKT all pass
   - mode switching: all three hardware-mode profiles confirmed
-  - audio enumeration: 3 outputs (LG UltraFine, Mac mini Speakers, WH-1000XM4), 1 input
+  - audio enumeration (historical 2026-04-04 snapshot): 3 outputs, 1 input at that point; current source build now preserves duplicate USB codecs as 4 outputs, 2 inputs
   - serial scan: pyserial executes; `/dev/cu.*` naming confirmed; no hardware ports present
   - BLE transport module loads; TransportState members verified; bleak absent (gracefully guarded — SKIP)
   - platform paths: `~/Library/Application Support/HamHatCC` (exists), `~/Library/Logs/HamHatCC`
@@ -35,6 +35,10 @@ python3 app/scripts/platform_validation.py
   - audio enumeration, serial scan, bundle contents, and Info.plist permissions confirmed
   - GUI-visible checks confirmed: audio routing controls visible in Control tab, serial port field populated, profile values match disk, autosave status visible, Refresh buttons present
   - remaining packaged-app checks: actual button-click delivery needs Accessibility permission; BLE permission dialog needs hardware
+- macOS hardware follow-up (2026-04-06): SA818 TX/PTT/audio workflow confirmed after shared fixes
+  - root cause 1: saved radio offset of `0.600` made TX land on `frequency + offset`; defaults and UI now make simplex `0.000` explicit
+  - root cause 2: duplicate Core Audio devices named `USB Audio Device` were collapsed into one UI entry; app now keeps them distinct as `[1]` and `[2]`
+  - shared fixes now in common code: clearer RX/TX apply status, duplicate USB codec preservation, frozen-app playback fallback, TX overlap guard, compatible playback path for TX workers
 - Raspberry Pi: source-run GUI bring-up confirmed with `python3 main.py --rpi`
 - smoke test is safe in sparse environments
 - guard-only optional-dependency validation exists
@@ -60,7 +64,7 @@ python3 app/scripts/platform_validation.py
 
 - wheel zoom
 - serial scan
-- audio enumeration
+- audio enumeration and correct USB codec selection when multiple same-name codecs are present
 - profile persistence
 - BLE prerequisites/path
 
@@ -76,12 +80,12 @@ python3 app/scripts/platform_validation.py
   - `--help`: confirmed
   - profile path `~/Library/Application Support/HamHatCC/profiles/`: resolves
   - profile save/load round-trip (ProfileManager API): confirmed
-  - audio enumeration (sounddevice): 3 out (LG ULTRAFINE, Mac mini Speakers, WH-1000XM4), 1 in: confirmed
+  - audio enumeration (sounddevice): shared duplicate-device fix landed; current source build sees 4 out (LG ULTRAFINE, Mac mini Speakers, USB Audio Device [1], USB Audio Device [2]) and 2 in
   - serial scan (pyserial): executes, `/dev/cu.*` ports returned: confirmed
   - bleak: packed in PyInstaller CArchive; pyobjc CoreBluetooth bindings in Resources: confirmed
   - sv_ttk, PIL, scipy, numpy in bundle: confirmed
   - NSBluetoothAlwaysUsageDescription + NSMicrophoneUsageDescription in Info.plist: confirmed
-  - GUI visual checks (screenshot-confirmed 2026-04-04): window launches cleanly; Control tab shows Audio Output=LG ULTRAFINE and Audio Input=WH-1000XM4; serial port /dev/cu.debug-console auto-detected in UI; profile values match disk; status bar shows "Profile saved: last_profile.json" (autosave confirmed); Refresh buttons present
+  - GUI visual checks (screenshot-confirmed 2026-04-04, historical snapshot): window launches cleanly; Control tab showed Audio Output=LG ULTRAFINE and Audio Input=WH-1000XM4 at that time; serial port /dev/cu.debug-console auto-detected in UI; profile values match disk; status bar shows "Profile saved: last_profile.json" (autosave confirmed); Refresh buttons present
   - Remaining: button-click response verification blocked by macOS 15 Accessibility requirement for CGEvent→Tkinter; BLE dialog needs hardware
 - Linux packaging/deployment exit check — spec + build scripts ready; build not yet run
 - Raspberry Pi deployment verification

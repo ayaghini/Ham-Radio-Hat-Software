@@ -17,12 +17,12 @@ Read only these first:
 Current repo truth:
 - `app/` is the only active app
 - `archive/` contains historical snapshots
-- macOS source-run validation is largely complete
+- macOS source-run validation is largely complete and SA818 TX/PTT/audio workflow is confirmed
 - macOS packaged-app validation is substantially complete; remaining checks need Accessibility permission or BLE hardware
 - Raspberry Pi source-run bring-up is confirmed, but item-by-item validation still remains
 - Linux desktop validation is still pending
 - Linux packaging build has not yet been run
-- main remaining work is Linux/RPi validation, packaging verification, and hardware-backed PAKT validation
+- main remaining work is Raspberry Pi validation, Linux validation, packaging verification, and hardware-backed PAKT validation
 
 Default expectations:
 - prefer small direct fixes over broad rewrites

@@ -133,7 +133,12 @@ class MainTab(ttk.Frame):
         self._radio_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(_sp, 0))
         self._radio_frame.columnconfigure(1, weight=1)
         add_row(self._radio_frame, "Frequency (MHz)", ttk.Entry(self._radio_frame, textvariable=self._state.frequency_var, width=14), 0)
-        add_row(self._radio_frame, "Offset (MHz)", ttk.Entry(self._radio_frame, textvariable=self._state.offset_var, width=14), 1)
+        add_row(
+            self._radio_frame,
+            "TX Offset (MHz, 0.000 = simplex)",
+            ttk.Entry(self._radio_frame, textvariable=self._state.offset_var, width=14),
+            1,
+        )
         add_row(self._radio_frame, "Squelch (0-8)", ttk.Entry(self._radio_frame, textvariable=self._state.squelch_var, width=14), 2)
         bw = ttk.Combobox(self._radio_frame, textvariable=self._state.bandwidth_var, values=["Wide", "Narrow"], width=12, state="readonly")
         add_row(self._radio_frame, "Bandwidth", bw, 3)

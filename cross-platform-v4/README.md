@@ -7,7 +7,7 @@ Scope: track portability, validation, packaging, and release work for the active
 - Active app path: `app/`
 - Archived snapshots: `archive/`
 - macOS source-run bring-up: confirmed
-- macOS packaged-app checks: substantially complete
+- macOS packaged-app checks: substantially complete; SA818 TX/PTT/audio workflow now confirmed
 - Raspberry Pi source-run bring-up: confirmed
 - Linux desktop bring-up: still pending
 - Launcher parity: done (`run_windows.ps1`, `run_windows.bat`, `run_mac.command`, `run_linux.sh`, `run_rpi.sh`)

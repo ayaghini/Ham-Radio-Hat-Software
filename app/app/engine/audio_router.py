@@ -225,7 +225,7 @@ class AudioRouter:
         on_windows = platform.system().lower() == "windows"
         on_worker = _t.current_thread() is not _t.main_thread()
 
-        if on_windows and on_worker:
+        if on_windows and on_worker and not getattr(sys, "frozen", False):
             ts_path = wav_out_path or (self._audio_dir / f"rx_cap_{id(threading.current_thread())}.wav")
             ts_path.parent.mkdir(parents=True, exist_ok=True)
             _capture_wav_subprocess(ts_path, seconds, device_index, self._app_dir)
@@ -250,7 +250,11 @@ class AudioRouter:
         import platform
         import threading as _t
 
-        if platform.system().lower() == "windows" and _t.current_thread() is not _t.main_thread():
+        if (
+            platform.system().lower() == "windows"
+            and _t.current_thread() is not _t.main_thread()
+            and not getattr(sys, "frozen", False)
+        ):
             _capture_wav_subprocess(wav_path, seconds, device_index, self._app_dir)
             return
         record_wav(wav_path, seconds=seconds, device_index=device_index)
@@ -273,8 +277,17 @@ class AudioRouter:
 # ---------------------------------------------------------------------------
 
 def _play_wav_subprocess(wav_path: Path, device_index: int, app_dir: Path) -> None:
+    import platform
+
+    # In frozen PyInstaller apps, sys.executable is the app binary rather than a Python
+    # interpreter, so `sys.executable script.py ...` recurses or fails instead of running
+    # the helper worker.  Fall back to direct compatible playback there.
+    if getattr(sys, "frozen", False):
+        play_wav_blocking_compatible(wav_path, device_index=device_index)
+        return
+
     script = app_dir / "scripts" / "play_wav_worker.py"
-    if script.exists():
+    if platform.system().lower() == "windows" and script.exists():
         proc = subprocess.run(
             [sys.executable, str(script), "--wav", str(wav_path), "--output-device", str(device_index)],
             capture_output=True, text=True, check=False,
@@ -287,6 +300,11 @@ def _play_wav_subprocess(wav_path: Path, device_index: int, app_dir: Path) -> No
 
 
 def _capture_wav_subprocess(wav_path: Path, seconds: float, device_index: Optional[int], app_dir: Path) -> None:
+    # Same frozen-app issue as playback: PyInstaller bundles cannot run `.py` helper
+    # scripts via sys.executable. Let callers fall back to in-process capture there.
+    if getattr(sys, "frozen", False):
+        raise RuntimeError("capture subprocess helper is unavailable in frozen builds")
+
     script = app_dir / "scripts" / "capture_wav_worker.py"
     if not script.exists():
         raise RuntimeError(f"Missing script: {script}")

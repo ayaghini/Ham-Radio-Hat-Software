@@ -71,7 +71,7 @@ class AppState:
         self.port_var = tk.StringVar()
         self.status_var = tk.StringVar()
         self.frequency_var = tk.StringVar(value="145.070")
-        self.offset_var = tk.StringVar(value="0.600")
+        self.offset_var = tk.StringVar(value="0.000")
         self.squelch_var = tk.StringVar(value="4")
         self.bandwidth_var = tk.StringVar(value="Wide")
         self.audio_out_var = tk.StringVar()

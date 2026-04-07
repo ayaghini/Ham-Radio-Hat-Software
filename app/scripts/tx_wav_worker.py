@@ -110,6 +110,7 @@ def main() -> int:
         print(f"[tx_wav_worker] WAV not found: {wav_path}", file=sys.stderr)
         return 2
 
+    from app.engine.audio_tools import play_wav_blocking_compatible
     from app.engine.sa818_client import SA818Client, SA818Error
     from app.engine.models import RadioConfig
 
@@ -135,13 +136,22 @@ def main() -> int:
             except Exception:
                 pass
 
-        data_f, rate = _load_wav_float32(wav_path)
+        with wave.open(str(wav_path), "rb") as wf:
+            sampwidth = wf.getsampwidth()
+
+        data_f = rate = None
 
         # PTT → pre-delay → play → post-delay → release PTT
         client.set_ptt(True, line=args.ptt_line, active_high=args.ptt_active_high)
         time.sleep(max(0.0, args.ptt_pre_ms / 1000.0))
         try:
-            sd.play(data_f, samplerate=rate, device=int(args.output_device), blocking=True)
+            if sampwidth == 2:
+                # Keep TX worker playback aligned with the main engine path so Windows
+                # devices that need sample-rate/channel adaptation do not degrade here.
+                play_wav_blocking_compatible(wav_path, device_index=int(args.output_device))
+            else:
+                data_f, rate = _load_wav_float32(wav_path)
+                sd.play(data_f, samplerate=rate, device=int(args.output_device), blocking=True)
         finally:
             # Primary PTT release: always runs whether play succeeded or not.
             time.sleep(max(0.0, args.ptt_post_ms / 1000.0))

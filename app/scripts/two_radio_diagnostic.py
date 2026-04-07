@@ -91,12 +91,10 @@ def _record_into(path: Path, seconds: float, device: int | None, rate: int) -> N
 
 
 def _play_wav(path: Path, device: int | None, rate: int) -> None:
-    import sounddevice as sd
-    import numpy as np
-    with wave.open(str(path), "rb") as wf:
-        frames = wf.readframes(wf.getnframes())
-    data = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-    sd.play(data, samplerate=rate, device=device, blocking=True)
+    from app.engine.audio_tools import play_wav_blocking_compatible
+    if device is None:
+        raise ValueError("two_radio_diagnostic requires an explicit output device")
+    play_wav_blocking_compatible(path, device_index=int(device))
 
 
 def _decode_wav(path: Path, rate: int) -> list:

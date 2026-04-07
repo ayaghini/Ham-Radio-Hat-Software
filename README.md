@@ -15,8 +15,8 @@ This repository now centers on [`app`](app), which is the active cross-platform 
 | Core `v4` app | Active | Main desktop app, primary development target |
 | `PAKT` hardware mode | Implemented | Native BLE-backed third mode alongside `SA818` and `DigiRig` |
 | Whole-app integrity | Stronger | Recent passes fixed mode switching, status routing, startup behavior, and script validation gaps |
-| Cross-platform runtime prep | In progress | macOS/Linux/RPi support work is now implemented in the `v4` codebase, with docs and audit trail updated |
-| Real hardware validation | In progress | macOS source-run and packaged-app checks are substantially complete; Linux desktop and Raspberry Pi item-by-item validation still remain; BLE live scan still needs hardware |
+| Cross-platform runtime prep | In progress | Shared fixes now cover offset/TX-frequency clarity, duplicate USB codec enumeration, packaged-audio routing, and TX overlap guards across macOS/Windows/Linux/RPi |
+| Real hardware validation | In progress | macOS SA818 TX/PTT/audio workflow is now confirmed; Raspberry Pi item-by-item validation is next; Linux desktop and BLE live scan still need real sessions |
 | Launcher UX parity | Done | `run_mac.command`, `run_linux.sh`, and `run_rpi.sh` added to the active `v4` app; all four platforms now have first-class source launchers |
 | Packaging verification | In progress | macOS: first `.app` build plus substantial exit checks complete; Linux build not yet run |
 | **Android expansion** | **Phase 2 complete** | Full Kivy/KivyMD app in `app/android/`; SA818 AT commands, APRS TX/RX modem, PAKT mesh bridge, Android foreground service; all smoke tests pass |
@@ -28,7 +28,7 @@ v4 app integrity            [##########] 100%
 PAKT integration            [#########-]  90%
 Cross-platform code prep    [##########] 100%
 Smoke / CI coverage         [#######---]  70%
-Real-device validation      [####------]  40%
+Real-device validation      [#####-----]  50%
 Packaging verification      [#######---]  70%
 Android Phase 1 (skeleton)  [##########] 100%
 Android Phase 2 (hardware)  [########--]  80%
@@ -46,14 +46,20 @@ Android Phase 2 (hardware)  [########--]  80%
   - Windows worker capture temp audio migration out of the install tree
   - Linux/RPi map wheel support
   - safer sparse-environment smoke behavior plus guard-only CI coverage
+- fixed shared TX/audio issues discovered during macOS hardware validation:
+  - TX offset defaults/labeling now make simplex use explicit (`0.000`)
+  - radio-apply status now shows both RX and TX frequencies
+  - duplicate same-name USB codecs now remain separately selectable
+  - packaged/frozen audio playback no longer relies on broken helper-script recursion
+  - TX actions now reject overlapping runs instead of stacking worker threads
 
 ### Current Focus
 
 The next useful session should start with:
 
 1. **Android Phase 3** — first `buildozer android debug` APK build on Linux host; device install and functional validation; signing for release
-2. Linux desktop bring-up and `platform_validation.py`
-3. Raspberry Pi item-by-item validation
+2. Raspberry Pi item-by-item validation
+3. Linux desktop bring-up and `platform_validation.py`
 4. macOS packaged-app remaining interaction checks (Accessibility permission + BLE hardware)
 5. PAKT BLE hardware validation on real devices
 6. Linux packaging/build verification against the documented release checklist
@@ -119,7 +125,7 @@ Known current limitations:
 - structured PAKT telemetry UI remains basic and is currently surfaced mainly via status/log output
 - Linux desktop still has not had a real validation run
 - Raspberry Pi bring-up is confirmed, but item-by-item workflow validation is still pending
-- macOS packaged-app click-response checks are blocked until Accessibility permission is granted; BLE permission/dialog behavior still needs hardware
+- macOS core SA818 workflow is now working, but packaged-app click-response checks are still blocked until Accessibility permission is granted; BLE permission/dialog behavior still needs hardware
 
 ### Raspberry Pi
 
