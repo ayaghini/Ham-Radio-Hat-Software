@@ -453,6 +453,8 @@ class AprsEngine:
                     self._audio.play_with_ptt_blocking(wav_path, out_dev, ptt, effective_cb)
             except Exception as exc:
                 self._aprs_log(f"Test tone failed: {exc}")
+                if self._on_error:
+                    self._on_error("Test Tone Error", str(exc))
             finally:
                 if dr_ser is not None:
                     try:

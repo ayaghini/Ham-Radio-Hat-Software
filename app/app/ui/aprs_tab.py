@@ -65,7 +65,7 @@ class AprsTab(ttk.Frame):
         add_row(f, "TX Gain (0.05-0.40)", ttk.Entry(f, textvariable=self._app.aprs_tx_gain_var, width=10), 3)
         add_row(f, "Preamble Flags (16-400)", ttk.Entry(f, textvariable=self._app.aprs_preamble_var, width=10), 4)
         add_row(f, "TX Repeats (1-5)", ttk.Entry(f, textvariable=self._app.aprs_repeats_var, width=10), 5)
-        ttk.Checkbutton(f, text="Re-init SA818 before APRS TX",
+        ttk.Checkbutton(f, text="Re-init uConsole_HAT before APRS TX",
                         variable=self._app.aprs_reinit_var).grid(row=6, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
     def _build_message(self, parent: ttk.Frame) -> None:

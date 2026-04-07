@@ -109,8 +109,8 @@ class AppState:
         self.aprs_rx_os_level_var = tk.IntVar(value=35)
         self.aprs_rx_auto_var = tk.BooleanVar(value=True)
 
-        # --- Hardware mode (SA818 HAT or DigiRig) ---
-        self.hardware_mode_var = tk.StringVar(value="SA818")
+        # --- Hardware mode (uConsole_HAT, DigiRig, or PAKT) ---
+        self.hardware_mode_var = tk.StringVar(value="uConsole_HAT")
         self.digirig_port_var = tk.StringVar(value="")
         self.pakt_device_var = tk.StringVar(value="")
         self.pakt_address_var = tk.StringVar(value="")

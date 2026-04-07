@@ -59,7 +59,7 @@ class SetupTab(ttk.Frame):
         row = 0
 
         # ---- Advanced Radio: Filters ----
-        ff = ttk.LabelFrame(inner, text="Audio Filters (SA818)", padding=8)
+        ff = ttk.LabelFrame(inner, text="Audio Filters (uConsole_HAT)", padding=8)
         ff.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
         ff.columnconfigure(0, weight=1)
         row += 1
@@ -210,6 +210,18 @@ class SetupTab(ttk.Frame):
 
         row = 0
 
+        # ---- Audio routing helpers ----
+        ah = ttk.LabelFrame(inner, text="Audio Routing Helpers", padding=8)
+        ah.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        ah.columnconfigure(0, weight=1)
+        row += 1
+
+        ttk.Button(ah, text="Auto Find TX/RX Pair",
+                   command=self._app.auto_find_audio_pair).grid(row=0, column=0, sticky="ew")
+        ttk.Checkbutton(ah, text="Auto-select USB audio pair on connect",
+                        variable=self._app.auto_audio_var).grid(
+            row=1, column=0, sticky="w", pady=(6, 0))
+
         # ---- Test tone ----
         tf = ttk.LabelFrame(inner, text="Audio Tools — Test Tone", padding=8)
         tf.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
@@ -258,6 +270,19 @@ class SetupTab(ttk.Frame):
         ttk.Button(sf, text="Run TX Channel Sweep",
                    command=self._tx_channel_sweep).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
+        # ---- PTT Diagnostics ----
+        pttd = ttk.LabelFrame(inner, text="PTT Diagnostics", padding=8)
+        pttd.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        row += 1
+        ttk.Label(pttd,
+                  text="Cycles RTS/DTR in both polarities (1.5 s each).\n"
+                       "Watch your handheld for a carrier — note which step keys the radio.\n"
+                       "Results appear in the main status bar. uConsole_HAT mode only.",
+                  foreground="#9cc4dd", font=("TkDefaultFont", 8)).grid(
+            row=0, column=0, columnspan=2, sticky="w")
+        ttk.Button(pttd, text="▶ Run PTT Diagnostics",
+                   command=self._ptt_diagnostics).grid(row=1, column=0, sticky="w", pady=(4, 0))
+
         # ---- Auto RX detect ----
         arf = ttk.LabelFrame(inner, text="Auto-detect RX Level", padding=8)
         arf.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
@@ -276,8 +301,8 @@ class SetupTab(ttk.Frame):
 
         p_row = ttk.Frame(pf)
         p_row.pack(fill="x")
-        ttk.Button(p_row, text="Save Profile…",    command=self._save_profile).pack(side="left", padx=(0, 4))
-        ttk.Button(p_row, text="Load Profile…",    command=self._load_profile).pack(side="left", padx=4)
+        ttk.Button(p_row, text="Export Profile…",  command=self._save_profile).pack(side="left", padx=(0, 4))
+        ttk.Button(p_row, text="Import Profile…",  command=self._load_profile).pack(side="left", padx=4)
         ttk.Button(p_row, text="Reset Defaults",   command=self._reset_defaults).pack(side="left", padx=4)
 
         # ---- Bootstrap ----
@@ -339,6 +364,9 @@ class SetupTab(ttk.Frame):
 
     def _auto_detect_rx(self) -> None:
         self._app.auto_detect_rx()
+
+    def _ptt_diagnostics(self) -> None:
+        self._app.ptt_diagnostics()
 
     def _save_profile(self) -> None:
         path = filedialog.asksaveasfilename(

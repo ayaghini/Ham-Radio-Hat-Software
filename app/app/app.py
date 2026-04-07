@@ -350,7 +350,7 @@ class HamHatApp(tk.Tk):
         Called 500 ms after startup (via after()) so the window is visible first.
 
         Common groups checked:
-          - dialout : usually needed for serial port access (SA818, DigiRig)
+          - dialout : usually needed for serial port access (uConsole_HAT, DigiRig)
           - bluetooth : often needed for BLE access (PAKT), though some
             systems allow BLE via polkit rules or root instead
 
@@ -396,7 +396,7 @@ class HamHatApp(tk.Tk):
             for g in missing:
                 if g == "dialout":
                     serial_blocked = True
-                    lines.append(f"  • dialout — needed for serial port (SA818, DigiRig)")
+                    lines.append(f"  • dialout — needed for serial port (uConsole_HAT, DigiRig)")
                     lines.append(f"    Fix: sudo usermod -aG dialout $USER")
                 elif g == "bluetooth":
                     lines.append(f"  • bluetooth — commonly needed for BLE (PAKT TNC)")
@@ -683,7 +683,8 @@ class HamHatApp(tk.Tk):
 
     def _hw_mode(self) -> str:
         """Return current hardware mode."""
-        return self.hardware_mode_var.get()
+        hw = self.hardware_mode_var.get()
+        return "SA818" if hw == "uConsole_HAT" else hw
 
     def on_hw_mode_changed(self) -> None:
         """Reset the footer connection indicator when the hardware mode selector changes."""
@@ -699,7 +700,7 @@ class HamHatApp(tk.Tk):
             self.pakt_connect_selected()
             return
         if self._hw_mode() == "DigiRig":
-            self._set_status("DigiRig mode: no SA818 connection needed. Set PTT port and select audio device.")
+            self._set_status("DigiRig mode: no uConsole_HAT connection needed. Set PTT port and select audio device.")
             return
 
         port = (port or self.port_var.get()).strip()
@@ -800,10 +801,10 @@ class HamHatApp(tk.Tk):
                         non_sa818_ports.append((device, desc))
 
                 if sa818_ports:
-                    self._evq.put_nowait(_LogEvt(f"DigiRig auto-identify: SA818 found on {', '.join(sa818_ports)} (skipped)"))
+                    self._evq.put_nowait(_LogEvt(f"DigiRig auto-identify: uConsole_HAT found on {', '.join(sa818_ports)} (skipped)"))
 
                 if not non_sa818_ports:
-                    self._evq.put_nowait(_StatusEvt("DigiRig auto-identify: no non-SA818 port found. Is DigiRig connected?"))
+                    self._evq.put_nowait(_StatusEvt("DigiRig auto-identify: no non-uConsole_HAT port found. Is DigiRig connected?"))
                     return
 
                 # Prefer CP210x / Silicon Labs ports (DigiRig uses CP2102).
@@ -845,7 +846,7 @@ class HamHatApp(tk.Tk):
                     self._evq.put_nowait(_StatusEvt(f"Auto-connected: {port} ({detail})"))
                     self.after_idle(self._apply_radio_after_connect)
                     return
-            self._evq.put_nowait(_StatusEvt("Auto-identify: no SA818 found on any port"))
+            self._evq.put_nowait(_StatusEvt("Auto-identify: no uConsole_HAT found on any port"))
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -972,6 +973,23 @@ class HamHatApp(tk.Tk):
     def set_input_device(self, idx: Optional[int], name: str) -> None:
         self._input_dev_idx  = idx
         self._input_dev_name = name
+
+    def _resolve_output_dev_fallback(self) -> int:
+        """Return the best available output device index when none is explicitly selected.
+
+        Preference order:
+          1. First USB / external audio output (catches SA818 / DigiRig audio interface)
+          2. Device 0 as a last resort
+        """
+        try:
+            devs = list_output_devices()  # list of (idx, name)
+            for idx, name in devs:
+                if "usb" in name.lower():
+                    _log.debug("_resolve_output_dev_fallback: selected USB device %s (%s)", idx, name)
+                    return idx
+        except Exception as exc:
+            _log.debug("_resolve_output_dev_fallback: device scan error: %s", exc)
+        return 0
 
     # -----------------------------------------------------------------------
     # APRS helper actions (read from tk vars; called by tab buttons)
@@ -1170,14 +1188,25 @@ class HamHatApp(tk.Tk):
     # -----------------------------------------------------------------------
 
     def play_test_tone(self, freq: float = 1200.0, duration: float = 2.0) -> None:
-        if self._hw_mode() == "PAKT":
-            self._set_status("Test tone is not applicable in PAKT mode")
-            return
-        out_dev = getattr(self, "_output_dev_idx", None) or 0
+        out_dev = getattr(self, "_output_dev_idx", None)
+        if out_dev is None:
+            out_dev = self._resolve_output_dev_fallback()
         ptt = self._make_ptt_config()
+        if self._hw_mode() == "PAKT":
+            # Audio routing test is still useful in PAKT mode; skip PTT keying.
+            ptt = PttConfig(enabled=False)
         dr_port = self.digirig_port_var.get().strip() if self._hw_mode() == "DigiRig" else ""
+        if self._hw_mode() == "SA818":
+            try:
+                port = str(self.radio.client.ser.port) if self.radio.connected and self.radio.client.ser else "(not connected)"
+            except Exception:
+                port = "(unknown)"
+            self._set_status(
+                f"Test tone queued: out_dev={out_dev}, PTT={ptt.line}, active_high={ptt.active_high}, uConsole_HAT port={port}"
+            )
         self.aprs.play_test_tone(freq, duration, out_dev, ptt, ptt_serial_port=dr_port)
-        self._set_status(f"Test tone: {freq:.0f} Hz  {duration:.1f}s")
+        if self._hw_mode() != "SA818":
+            self._set_status(f"Test tone: {freq:.0f} Hz  {duration:.1f}s → device {out_dev}")
 
     def play_manual_aprs_packet(self, text: str) -> None:
         if self._hw_mode() == "PAKT":
@@ -1212,8 +1241,13 @@ class HamHatApp(tk.Tk):
 
     def tx_channel_sweep(self) -> None:
         """Run TX channel sweep to help find the correct audio routing."""
-        out_dev = getattr(self, "_output_dev_idx", None) or 0
+        out_dev = getattr(self, "_output_dev_idx", None)
+        if out_dev is None:
+            out_dev = self._resolve_output_dev_fallback()
         ptt = self._make_ptt_config()
+        if self._hw_mode() == "PAKT":
+            # No PTT keying in PAKT mode; sweep plays audio only.
+            ptt = PttConfig(enabled=False)
         sweep_freqs = [1200, 1500, 1800, 2200]
         dr_port = self.digirig_port_var.get().strip() if self._hw_mode() == "DigiRig" else ""
 
@@ -1237,13 +1271,16 @@ class HamHatApp(tk.Tk):
                     try:
                         drive = state if ptt.active_high else (not state)
                         dr_ser.rts = drive
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        _log.warning("DigiRig PTT error (state=%s): %s", state, exc)
+                        self._evq.put_nowait(_StatusEvt(f"DigiRig PTT error ({'ON' if state else 'OFF'}): {exc}"))
                 elif not dr_port:
                     try:
                         self.radio.set_ptt(state, line=ptt.line, active_high=ptt.active_high)
-                    except Exception:
-                        pass
+                        _log.debug("PTT %s: line=%s active_high=%s", 'ON' if state else 'OFF', ptt.line, ptt.active_high)
+                    except Exception as exc:
+                        _log.warning("SA818 PTT error (state=%s): %s", state, exc)
+                        self._evq.put_nowait(_StatusEvt(f"PTT error ({'ON' if state else 'OFF'}): {exc}"))
 
             try:
                 for f in sweep_freqs:
@@ -1251,8 +1288,9 @@ class HamHatApp(tk.Tk):
                         wav_path = self._audio_dir / f"sweep_{f}.wav"
                         write_test_tone_wav(wav_path, frequency_hz=float(f), seconds=0.4)
                         self.audio.play_with_ptt_blocking(wav_path, out_dev, ptt, ptt_cb)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        _log.warning("TX sweep error at %s Hz (dev=%s): %s", f, out_dev, exc)
+                        self._evq.put_nowait(_StatusEvt(f"Sweep error at {f} Hz (dev {out_dev}): {exc}"))
             finally:
                 if dr_ser is not None:
                     try:
@@ -1264,6 +1302,49 @@ class HamHatApp(tk.Tk):
 
         threading.Thread(target=worker, daemon=True).start()
         self._set_status("Running TX sweep…")
+
+    def ptt_diagnostics(self) -> None:
+        """Cycle through RTS/DTR + active-high/low for 1.5 s each to identify the correct PTT wiring.
+
+        Results appear in the main log.  Watch the radio/handheld for a carrier during each step.
+        """
+        if self._hw_mode() not in ("SA818",):
+            self._set_status("PTT diagnostics: uConsole_HAT mode only"); return
+        if not self.radio.connected:
+            self._set_status("PTT diagnostics: radio not connected"); return
+
+        combos = [
+            ("RTS", True,  "RTS active-high  (current profile)"),
+            ("RTS", False, "RTS active-low   (inverted)"),
+            ("DTR", True,  "DTR active-high"),
+            ("DTR", False, "DTR active-low   (inverted)"),
+        ]
+
+        def worker():
+            self._evq.put_nowait(_StatusEvt("PTT diagnostics: starting — watch for carrier on radio…"))
+            for line, active_high, label in combos:
+                try:
+                    self._evq.put_nowait(_StatusEvt(f"PTT diag: keying {label}"))
+                    self.radio.set_ptt(True,  line=line, active_high=active_high)
+                    import time as _t; _t.sleep(1.5)
+                except Exception as exc:
+                    self._evq.put_nowait(_StatusEvt(f"PTT diag error ({label}): {exc}"))
+                finally:
+                    try:
+                        self.radio.release_ptt(line=line, active_high=active_high)
+                    except Exception:
+                        pass
+                    import time as _t; _t.sleep(0.8)
+            try:
+                # Final safety-net release using the current profile settings so a failed
+                # diagnostic step cannot leave the radio keyed until the cable is replugged.
+                _p = self._get_current_profile()
+                self.radio.release_ptt(line=_p.ptt_line, active_high=_p.ptt_active_high)
+            except Exception:
+                pass
+            self._evq.put_nowait(_StatusEvt("PTT diagnostics complete — note which step keyed the radio"))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def auto_detect_rx(self) -> None:
         """Capture a short audio sample and suggest OS mic level."""
@@ -1549,8 +1630,8 @@ class HamHatApp(tk.Tk):
         self.comms.from_dict({"contacts": p.chat_contacts, "groups": p.chat_groups})
         self._comms_tab.refresh_contacts()
         # Restore hardware mode vars
-        hw = p.hardware_mode if p.hardware_mode in ("SA818", "DigiRig", "PAKT") else "SA818"
-        self.hardware_mode_var.set(hw)
+        hw = p.hardware_mode if p.hardware_mode in ("SA818", "uConsole_HAT", "DigiRig", "PAKT") else "SA818"
+        self.hardware_mode_var.set("uConsole_HAT" if hw == "SA818" else hw)
         self.digirig_port_var.set(p.digirig_port)
         self.pakt_device_var.set(p.pakt_device_name)
         self.pakt_address_var.set(p.pakt_device_address)
@@ -1593,7 +1674,8 @@ class HamHatApp(tk.Tk):
         p.output_device_name = getattr(self, "_output_dev_name", "")
         p.input_device_name  = getattr(self, "_input_dev_name", "")
         # Hardware mode
-        p.hardware_mode = self.hardware_mode_var.get()
+        hw = self.hardware_mode_var.get()
+        p.hardware_mode = "SA818" if hw == "uConsole_HAT" else hw
         p.digirig_port  = self.digirig_port_var.get().strip()
         p.pakt_device_name = self.pakt_device_var.get().strip()
         p.pakt_device_address = self.pakt_address_var.get().strip()
@@ -2000,8 +2082,8 @@ class HamHatApp(tk.Tk):
         def worker():
             try:
                 ver = self.radio.version()
-                self._evq.put_nowait(_StatusEvt(f"SA818 version: {ver}"))
-                self._evq.put_nowait(_LogEvt(f"SA818 version: {ver}"))
+                self._evq.put_nowait(_StatusEvt(f"uConsole_HAT version: {ver}"))
+                self._evq.put_nowait(_LogEvt(f"uConsole_HAT version: {ver}"))
             except Exception as exc:
                 self._evq.put_nowait(_StatusEvt(f"Version error: {exc}"))
 

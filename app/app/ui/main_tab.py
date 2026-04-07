@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 class MainTab(ttk.Frame):
     """Control tab: connection, radio params, audio routing, log."""
 
+    _UI_PRIMARY_HW = "uConsole_HAT"
+
     def __init__(self, parent: ttk.Notebook, state: "HamHatApp") -> None:
         super().__init__(parent)
         self._state = state
@@ -66,45 +68,45 @@ class MainTab(ttk.Frame):
         conn = ttk.LabelFrame(parent, text="Connection", padding=8)
         conn.grid(row=0, column=0, columnspan=4, sticky="ew")
         conn.columnconfigure(1, weight=1)
+        conn.columnconfigure(3, weight=1)
 
-        # Hardware mode selector
-        ttk.Label(conn, text="Hardware Mode").grid(row=0, column=0, sticky="w", pady=3)
+        # uConsole_HAT serial port and hardware mode on one row
+        sa818_port_lbl = ttk.Label(conn, text="uConsole_HAT Serial Port")
+        sa818_port_lbl.grid(row=0, column=0, sticky="w", pady=3)
+        self.port_combo = ttk.Combobox(conn, textvariable=self._state.port_var, width=22, state="readonly")
+        self.port_combo.grid(row=0, column=1, sticky="ew", padx=6, pady=3)
+        self._sa818_only_widgets += [sa818_port_lbl, self.port_combo]
+
+        ttk.Label(conn, text="Hardware Mode").grid(row=0, column=2, sticky="w", padx=(12, 0), pady=3)
         hw_combo = ttk.Combobox(
             conn, textvariable=self._state.hardware_mode_var,
-            values=["SA818", "DigiRig", "PAKT"], width=12, state="readonly",
+            values=[self._UI_PRIMARY_HW, "DigiRig", "PAKT"], width=14, state="readonly",
         )
-        hw_combo.grid(row=0, column=1, sticky="w", padx=6, pady=3)
+        hw_combo.grid(row=0, column=3, sticky="w", padx=6, pady=3)
         hw_combo.bind("<<ComboboxSelected>>", self._on_hw_mode_changed)
-        ttk.Label(conn, textvariable=self._state.status_var).grid(row=0, column=2, sticky="e")
-
-        # SA818 serial port (hidden in DigiRig mode)
-        sa818_port_lbl = ttk.Label(conn, text="SA818 Serial Port")
-        sa818_port_lbl.grid(row=1, column=0, sticky="w", pady=3)
-        self.port_combo = ttk.Combobox(conn, textvariable=self._state.port_var, width=22, state="readonly")
-        self.port_combo.grid(row=1, column=1, sticky="ew", padx=6, pady=3)
-        self._sa818_only_widgets += [sa818_port_lbl, self.port_combo]
+        ttk.Label(conn, textvariable=self._state.status_var).grid(row=0, column=4, sticky="e", padx=(12, 0))
 
         # DigiRig PTT port (hidden in SA818 mode)
         dr_port_lbl = ttk.Label(conn, text="DigiRig PTT Port")
-        dr_port_lbl.grid(row=2, column=0, sticky="w", pady=3)
+        dr_port_lbl.grid(row=1, column=0, sticky="w", pady=3)
         dr_port_entry = ttk.Entry(conn, textvariable=self._state.digirig_port_var, width=22)
-        dr_port_entry.grid(row=2, column=1, sticky="ew", padx=6, pady=3)
+        dr_port_entry.grid(row=1, column=1, sticky="ew", padx=6, pady=3)
         self._digirig_only_widgets += [dr_port_lbl, dr_port_entry]
 
         pakt_dev_lbl = ttk.Label(conn, text="PAKT Device")
-        pakt_dev_lbl.grid(row=2, column=0, sticky="w", pady=3)
+        pakt_dev_lbl.grid(row=1, column=0, sticky="w", pady=3)
         self._pakt_device_combo = ttk.Combobox(
             conn,
             textvariable=self._state.pakt_device_var,
             width=22,
             state="readonly",
         )
-        self._pakt_device_combo.grid(row=2, column=1, sticky="ew", padx=6, pady=3)
+        self._pakt_device_combo.grid(row=1, column=1, sticky="ew", padx=6, pady=3)
         self._pakt_device_combo.bind("<<ComboboxSelected>>", self._on_pakt_device_selected)
         self._pakt_only_widgets += [pakt_dev_lbl, self._pakt_device_combo]
 
         btn_row = ttk.Frame(conn)
-        btn_row.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        btn_row.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(6, 0))
         for i in range(5):
             btn_row.columnconfigure(i, weight=1)
         ttk.Button(btn_row, text="Refresh", command=self._state.refresh_ports).grid(row=0, column=0, sticky="ew")
@@ -126,15 +128,8 @@ class MainTab(ttk.Frame):
         self._btn_pakt_disconnect.grid(row=0, column=4, sticky="ew", padx=(6, 0))
         self._pakt_only_widgets += [self._btn_pakt_scan, self._btn_pakt_connect, self._btn_pakt_disconnect]
 
-        profile_row = ttk.Frame(conn)
-        profile_row.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(6, 0))
-        for i in range(2):
-            profile_row.columnconfigure(i, weight=1)
-        ttk.Button(profile_row, text="Import Profile", command=self._state.import_profile).grid(row=0, column=0, sticky="ew")
-        ttk.Button(profile_row, text="Export Profile", command=self._state.export_profile).grid(row=0, column=1, sticky="ew", padx=(6, 0))
-
         # --- Radio params ---
-        self._radio_frame = ttk.LabelFrame(parent, text="Radio Parameters (SA818)", padding=8)
+        self._radio_frame = ttk.LabelFrame(parent, text="Radio Parameters (uConsole_HAT)", padding=8)
         self._radio_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(_sp, 0))
         self._radio_frame.columnconfigure(1, weight=1)
         add_row(self._radio_frame, "Frequency (MHz)", ttk.Entry(self._radio_frame, textvariable=self._state.frequency_var, width=14), 0)
@@ -211,7 +206,7 @@ class MainTab(ttk.Frame):
         self._pakt_only_widgets.append(self._pakt_frame)
 
         # --- Audio routing ---
-        audio = ttk.LabelFrame(parent, text="Audio Routing + Auto Detection", padding=8)
+        audio = ttk.LabelFrame(parent, text="Audio Routing", padding=8)
         audio.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=(_sp * 2, 0), pady=(_sp, 0))
         audio.columnconfigure(1, weight=1)
         self.out_combo = ttk.Combobox(audio, textvariable=self._state.audio_out_var, width=34, state="readonly")
@@ -222,30 +217,11 @@ class MainTab(ttk.Frame):
         self.in_combo.bind("<<ComboboxSelected>>", self._on_in_selected)
         ttk.Button(audio, text="Refresh Audio Devices", command=self._state.refresh_audio_devices).grid(
             row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-        ttk.Button(audio, text="Auto Find TX/RX Pair", command=self._state.auto_find_audio_pair).grid(
-            row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         ttk.Button(audio, text="TX Channel Announce Sweep", command=self._state.tx_channel_sweep).grid(
-            row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+            row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         ttk.Button(audio, text="Auto Detect RX by Voice", command=self._state.auto_detect_rx).grid(
-            row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-        ttk.Checkbutton(audio, text="Auto-select USB audio pair on connect",
-                        variable=self._state.auto_audio_var).grid(
-            row=6, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         self._shared_audio_frame = audio
-
-        # --- PTT ---
-        ptt = ttk.LabelFrame(parent, text="PTT", padding=8)
-        ptt.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(_sp, 0))
-        ptt.columnconfigure(1, weight=1)
-        ttk.Checkbutton(ptt, text="Key PTT during TX audio", variable=self._state.ptt_enabled_var).grid(
-            row=0, column=0, columnspan=2, sticky="w", pady=(0, 2))
-        ptt_line = ttk.Combobox(ptt, textvariable=self._state.ptt_line_var, values=["RTS", "DTR"], width=10, state="readonly")
-        add_row(ptt, "PTT Line", ptt_line, 1)
-        ttk.Checkbutton(ptt, text="PTT Active High", variable=self._state.ptt_active_high_var).grid(
-            row=2, column=0, columnspan=2, sticky="w")
-        add_row(ptt, "PTT Pre (ms)", ttk.Entry(ptt, textvariable=self._state.ptt_pre_ms_var, width=10), 3)
-        add_row(ptt, "PTT Post (ms)", ttk.Entry(ptt, textvariable=self._state.ptt_post_ms_var, width=10), 4)
-        self._shared_ptt_frame = ptt
 
         # Apply initial visibility based on current mode
         self._apply_hw_mode_visibility()
@@ -308,10 +284,8 @@ class MainTab(ttk.Frame):
         try:
             if is_pakt:
                 self._shared_audio_frame.grid_remove()
-                self._shared_ptt_frame.grid_remove()
             else:
                 self._shared_audio_frame.grid()
-                self._shared_ptt_frame.grid()
         except Exception:
             pass
 
@@ -330,9 +304,15 @@ class MainTab(ttk.Frame):
         self._state.ptt_pre_ms_var.set(str(p.ptt_pre_ms))
         self._state.ptt_post_ms_var.set(str(p.ptt_post_ms))
         self._state.auto_audio_var.set(p.auto_audio_select)
+        # Restore audio device name vars so populate_audio_devices does not default to the first
+        # available device when the profile-specified device is already present in the list.
+        if p.output_device_name:
+            self._state.audio_out_var.set(p.output_device_name)
+        if p.input_device_name:
+            self._state.audio_in_var.set(p.input_device_name)
         # Hardware mode (note: app.py also sets these vars; this is a redundant but safe belt-and-suspenders)
-        hw = p.hardware_mode if p.hardware_mode in ("SA818", "DigiRig", "PAKT") else "SA818"
-        self._state.hardware_mode_var.set(hw)
+        hw = p.hardware_mode if p.hardware_mode in ("SA818", self._UI_PRIMARY_HW, "DigiRig", "PAKT") else "SA818"
+        self._state.hardware_mode_var.set(self._UI_PRIMARY_HW if hw == "SA818" else hw)
         self._state.digirig_port_var.set(p.digirig_port)
         self._state.pakt_device_var.set(p.pakt_device_name)
         self._state.pakt_address_var.set(p.pakt_device_address)
@@ -371,7 +351,8 @@ class MainTab(ttk.Frame):
         p.output_device_name = self._state.audio_out_var.get()
         p.input_device_name  = self._state.audio_in_var.get()
         # Hardware mode
-        p.hardware_mode = self._state.hardware_mode_var.get()
+        hw = self._state.hardware_mode_var.get()
+        p.hardware_mode = "SA818" if hw == self._UI_PRIMARY_HW else hw
         p.digirig_port  = self._state.digirig_port_var.get().strip()
         p.pakt_device_name = self._state.pakt_device_var.get().strip()
         p.pakt_device_address = self._state.pakt_address_var.get().strip()

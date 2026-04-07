@@ -204,6 +204,8 @@ def _dict_to_profile(d: dict) -> AppProfile:
     p.chat_intro_note = _str("chat_intro_note", AppProfile.chat_intro_note)
 
     hw = _str("hardware_mode", AppProfile.hardware_mode)
+    if hw == "uConsole_HAT":
+        hw = "SA818"
     p.hardware_mode = hw if hw in ("SA818", "DigiRig", "PAKT") else "SA818"
     p.digirig_port = _str("digirig_port", AppProfile.digirig_port)
     p.pakt_device_name = _str("pakt_device_name", AppProfile.pakt_device_name)
