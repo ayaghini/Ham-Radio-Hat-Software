@@ -251,6 +251,8 @@ class HamHatApp(tk.Tk):
         self.mesh_rate_limit_ppm_var = self.state.mesh_rate_limit_ppm_var
         self.mesh_hello_enabled_var  = self.state.mesh_hello_enabled_var
         self.mesh_route_expiry_var   = self.state.mesh_route_expiry_var
+        self._audio_refresh_after_ids: list[str] = []
+        self._audio_refresh_generation = 0
         # Wire local_call_provider so mesh manager always sees current callsign
         self.mesh._local_call = lambda: self.aprs_source_var.get().upper().strip()
 
@@ -486,10 +488,8 @@ class HamHatApp(tk.Tk):
             # Keep port_var in sync so manual reconnect after disconnect uses the right port
             self.port_var.set(evt.port)
             # Composite USB radio interfaces can finish enumerating their audio codecs
-            # slightly after the serial side is already connectable. Refresh shortly
-            # after connect so TX/RX device comboboxes catch newly-present USB audio.
-            self.after(250, self.refresh_audio_devices)
-            self.after(500, self._auto_find_audio_background)
+            # slightly after the serial side is already connectable.
+            self._schedule_audio_refresh_retries()
 
         elif isinstance(evt, _DisconnectEvt):
             self._conn_lbl.configure(text="⚫ Disconnected", foreground="#e07070")
@@ -500,12 +500,19 @@ class HamHatApp(tk.Tk):
             self._handle_packet(evt.pkt)
 
         elif isinstance(evt, _AudioPairEvt):
-            self._main_tab.on_audio_pair(evt.out_idx, evt.out_name, evt.in_idx, evt.in_name)
-            self._set_status(f"Audio: {evt.out_name} / {evt.in_name}")
-            # Set OS levels immediately after device selection so both PCs have
-            # consistent TX FM deviation (output → 100%) and RX capture level.
-            self._apply_os_tx_level(100)
-            self._apply_os_rx_level(self._current_os_rx_level)
+            if self._should_apply_auto_audio_pair(evt):
+                self._main_tab.on_audio_pair(evt.out_idx, evt.out_name, evt.in_idx, evt.in_name)
+                self._set_status(f"Audio: {evt.out_name} / {evt.in_name}")
+                # Set OS levels immediately after device selection so both PCs have
+                # consistent TX FM deviation (output → 100%) and RX capture level.
+                self._apply_os_tx_level(100)
+                self._apply_os_rx_level(self._current_os_rx_level)
+            else:
+                _log.debug(
+                    "Ignoring auto-audio pair because current selection looks manual: %s / %s",
+                    self.audio_out_var.get(),
+                    self.audio_in_var.get(),
+                )
 
         elif isinstance(evt, _InputLevelEvt):
             self._comms_tab.set_input_level(evt.level)
@@ -653,14 +660,39 @@ class HamHatApp(tk.Tk):
         # Populate serial port list (FR-02: app shall list available serial ports)
         self.refresh_ports()
         # Refresh audio device lists for all modes so comboboxes are populated
-        self._main_tab.refresh_audio_devices()
+        self._schedule_audio_refresh_retries()
         if self._hw_mode() == "PAKT":
             self.pakt_scan()
             return
         # Try auto-select USB audio
         self._auto_find_audio_background()
 
-    def _auto_find_audio_background(self) -> None:
+    def _schedule_audio_refresh_retries(self) -> None:
+        """Refresh audio more than once so late USB codec enumeration is caught."""
+        self._audio_refresh_generation += 1
+        generation = self._audio_refresh_generation
+        for after_id in self._audio_refresh_after_ids:
+            try:
+                self.after_cancel(after_id)
+            except Exception:
+                pass
+        self._audio_refresh_after_ids.clear()
+        for delay_ms in (0, 250, 700, 1400):
+            self._audio_refresh_after_ids.append(
+                self.after(delay_ms, lambda gen=generation: self._refresh_audio_retry(gen))
+            )
+            self._audio_refresh_after_ids.append(
+                self.after(delay_ms + 120, lambda gen=generation: self._auto_find_audio_background(gen))
+            )
+
+    def _refresh_audio_retry(self, generation: int) -> None:
+        if generation != self._audio_refresh_generation:
+            return
+        self.refresh_audio_devices()
+
+    def _auto_find_audio_background(self, generation: Optional[int] = None) -> None:
+        if generation is not None and generation != self._audio_refresh_generation:
+            return
         p = self._get_current_profile()
         out_hint = p.output_device_name
         in_hint  = p.input_device_name
@@ -681,6 +713,21 @@ class HamHatApp(tk.Tk):
                 _log.debug("Auto-audio select error: %s", exc)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _should_apply_auto_audio_pair(self, evt: _AudioPairEvt) -> bool:
+        current_out = self.audio_out_var.get().strip()
+        current_in = self.audio_in_var.get().strip()
+        if not current_out and not current_in:
+            return True
+        if current_out == evt.out_name and current_in == evt.in_name:
+            return True
+
+        p = self._get_current_profile()
+        profile_out = p.output_device_name.strip()
+        profile_in = p.input_device_name.strip()
+        if current_out == profile_out and current_in == profile_in:
+            return True
+        return False
 
     # -----------------------------------------------------------------------
     # Hardware mode helper
@@ -2116,7 +2163,7 @@ class HamHatApp(tk.Tk):
                 subprocess.run(["pinctrl", "23", "dh"], check=True, capture_output=True, text=True)
                 self._evq.put_nowait(_StatusEvt("uConsole_HAT enabled"))
                 self.after(150, self.refresh_ports)
-                self.after(300, self.refresh_audio_devices)
+                self._schedule_audio_refresh_retries()
             except FileNotFoundError:
                 self._evq.put_nowait(_ErrorEvt("Enable Error", "pinctrl not found"))
             except subprocess.CalledProcessError as exc:

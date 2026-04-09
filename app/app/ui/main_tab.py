@@ -476,13 +476,15 @@ class MainTab(ttk.Frame):
         in_names  = [name for _, name in ins]
         self.out_combo["values"] = out_names
         self.in_combo["values"]  = in_names
-        # Restore selection if device name still present
-        if self._state.audio_out_var.get() not in out_names and out_names:
-            self._state.audio_out_var.set(out_names[0])
-            self._on_out_selected()
-        if self._state.audio_in_var.get() not in in_names and in_names:
-            self._state.audio_in_var.set(in_names[0])
-            self._on_in_selected()
+        # If the selected device disappeared, clear it instead of silently
+        # switching to the first arbitrary device. That avoids mismatched TX/RX
+        # selections while a USB codec is still enumerating after enable.
+        if self._state.audio_out_var.get() not in out_names:
+            self._state.audio_out_var.set("")
+            self._state.set_output_device(None, "")
+        if self._state.audio_in_var.get() not in in_names:
+            self._state.audio_in_var.set("")
+            self._state.set_input_device(None, "")
 
     def on_audio_pair(self, out_idx: int, out_name: str, in_idx: int, in_name: str) -> None:
         """Called by app dispatcher when auto-pair succeeds."""

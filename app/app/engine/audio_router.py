@@ -74,6 +74,7 @@ class AudioRouter:
         1. Match saved device names if still present.
         2. Exactly one USB output and one USB input → use them.
         3. Match by shared USB token (Windows device number in parentheses).
+        4. Match by shared ALSA card number from names like ``(hw:3,0)``.
 
         Returns (out_idx, in_idx) or None.
         """
@@ -143,7 +144,28 @@ class AudioRouter:
         if len(shared) == 1:
             return out_tok[shared[0]], in_tok[shared[0]]
 
-        # 4) Multiple matched pairs (e.g. two SA818s connected simultaneously).
+        # 4) Linux ALSA / PortAudio names expose the card number in the device
+        #    label itself, e.g. "(hw:3,0)". Use that to pair input/output for
+        #    the same physical USB codec when multiple identical codecs exist.
+        def alsa_card_token(name: str) -> str:
+            m = re.search(r"\(hw:(\d+),\d+\)", name, flags=re.IGNORECASE)
+            return m.group(1) if m else ""
+
+        out_card: dict[str, int] = {}
+        for idx, name in usb_outs:
+            t = alsa_card_token(name)
+            if t:
+                out_card[t] = idx
+        in_card: dict[str, int] = {}
+        for idx, name in usb_ins:
+            t = alsa_card_token(name)
+            if t:
+                in_card[t] = idx
+        shared_cards = [t for t in out_card if t in in_card]
+        if len(shared_cards) == 1:
+            return out_card[shared_cards[0]], in_card[shared_cards[0]]
+
+        # 5) Multiple matched pairs (e.g. two SA818s connected simultaneously).
         #    Sort by sum of device indices and return the lowest-index pair, which
         #    is typically the primary (first-connected) device.
         if shared:
@@ -154,6 +176,14 @@ class AudioRouter:
                 f"({out_tok[best]}/{in_tok[best]}). Select manually if wrong."
             )
             return out_tok[best], in_tok[best]
+        if shared_cards:
+            pairs = sorted(shared_cards, key=lambda t: out_card[t] + in_card[t])
+            best = pairs[0]
+            self._log(
+                f"Auto-audio: {len(shared_cards)} ALSA hw pairs found; using lowest-index pair "
+                f"({out_card[best]}/{in_card[best]}). Select manually if wrong."
+            )
+            return out_card[best], in_card[best]
 
         return None
 
